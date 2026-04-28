@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>URSS Carpooling</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="apple-touch-icon" sizes="180x180" href="urss-icon.png">
+<link rel="icon" type="image/png" href="urss-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="URSS">
+<meta name="theme-color" content="#6B1F1F">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+html {
+  background: #6B1F1F;
+  height: 100%;
+}
+body {
+  background: #6B1F1F;
+  min-height: 100%;
+}
+body::before {
+  content: "";
+  position: fixed;
+  top: -1000px;
+  left: 0;
+  right: 0;
+  height: 2000px;
+  background: #6B1F1F;
+  z-index: -1;
+}
+</style>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js';
+  import { getFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA5oclKXCbIhjoE9x-rsPNU4j-u4t-xTzc",
+    authDomain: "urss-carpooling.firebaseapp.com",
+    projectId: "urss-carpooling",
+    storageBucket: "urss-carpooling.appspot.com",
+    messagingSenderId: "359045091576",
+    appId: "1:359045091576:web:e48109e6cbc5730578ab0d"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window._db = db;
+  window._fsDoc = doc;
+  window._fsGetDoc = getDoc;
+  window._fsSetDoc = setDoc;
+  window._fsColl = collection;
+  window._fsGetDocs = getDocs;
+  window._BOT_WEBHOOK = 'https://distinguished-elegance-production-b3ac.up.railway.app';
+
+  // Save/load user profiles
+  window._saveProfile = async function(userId, data) {
+    try {
+      await setDoc(doc(db, 'profiles', userId), data, { merge: true });
+    } catch(e) { console.warn('Firestore save profile error', e); }
+  };
+
+  window._loadProfiles = async function() {
+    try {
+      const snap = await getDocs(collection(db, 'profiles'));
+      window.userProfiles = {};
+      snap.forEach(d => { window.userProfiles[d.id] = d.data(); });
+    } catch(e) { console.warn('Firestore load profiles error', e); }
+  };
+
+  // Load exceptions from Firestore on start
+  window._loadExceptions = async function() {
+    // Use real-time listener so all users see changes instantly
+    onSnapshot(collection(db, 'exceptions'), (snap) => {
+      // Reset both objects completely on each update
+      window.exceptions = {};
+      exceptions = {};
+      snap.forEach(d => {
+        window.exceptions[d.id] = d.data();
+        exceptions[d.id] = d.data();
+      });
+      // Re-render on any change
+      if (typeof renderTurnList === 'function') {
+        renderTurnList();
+        renderHero();
+        renderCalendar();
+      }
+    }, (e) => { console.warn('Firestore exceptions listener error', e); });
+  };
+
+  // Save exception to Firestore
+  window._saveException = async function(ds, data) {
+    try {
+      await setDoc(doc(db, 'exceptions', ds), data);
+    } catch(e) { console.warn('Firestore save error', e); }
+  };
+
+  // Load absences from Firestore
+  window._loadAbsences = async function() {
+    // Use real-time listener
+    onSnapshot(collection(db, 'absences'), (snap) => {
+      const loaded = [];
+      snap.forEach(d => loaded.push(d.data()));
+      window.absences = loaded;
+      absences = loaded;
+      if (typeof renderAbsences === 'function') {
+        renderAbsences();
+        renderTurnList();
+        renderHero();
+        renderCalendar();
+      }
+    }, (e) => { console.warn('Firestore absences listener error', e); });
+  };
+
+  // Save absence to Firestore
+  window._saveAbsence = async function(absence) {
+    try {
+      const id = `${absence.person}_${absence.from}_${absence.to}`;
+      await setDoc(doc(db, 'absences', id), absence);
+    } catch(e) { console.warn('Firestore save absence error', e); }
+  };
+
+  // Delete absence from Firestore
+  window._deleteAbsence = async function(absence) {
+    try {
+      const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+      const id = `${absence.person}_${absence.from}_${absence.to}`;
+      await deleteDoc(doc(db, 'absences', id));
+    } catch(e) { console.warn('Firestore delete absence error', e); }
+  };
+
+  // Loading handled by init() in main script
+</script>
+<style>
+:root {
+  --bg: #F2F0EB;
+  --card: #FFFFFF;
+  --text: #1A1A18;
+  --muted: #7A7870;
+  --border: #E0DDD6;
+  --accent: #2D6A4F;
+  --accent-light: #F5DDD8;
+  --accent-mid: #8B3A3A;
+  --warn: #E76F51;
+  --warn-light: #FDEEE9;
+  --ivan: #2D6A4F;
+  --ivan-light: #D8EEE4;
+  --ilaria: #6B4C9A;
+  --ilaria-light: #EDE5F8;
+  --dervis: #C25B2A;
+  --dervis-light: #FDEEE9;
+  --filippo: #1A6B8A;
+  --filippo-light: #DDF0F8;
+  --radius: 14px;
+  --radius-sm: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* HEADER */
+.app-header {
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  padding: 20px 0 0;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding: 0 20px;
+}
+
+.app-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.5px;
+}
+
+.app-subtitle {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.tg-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.22);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.settings-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* TODAY HERO */
+.today-hero {
+  background: rgba(0,0,0,0.18);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-avatar {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.4);
+  color: white;
+}
+
+.hero-info { flex: 1; }
+.hero-label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.08em; }
+.hero-name { font-size: 20px; font-weight: 600; color: white; line-height: 1.2; }
+.hero-detail { font-size: 13px; opacity: 0.8; margin-top: 3px; }
+
+.hero-badge {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  padding: 5px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* NAV TABS */
+.nav-tabs {
+  display: flex;
+  gap: 0;
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  padding: 0 20px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  padding: 12px 0 10px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  color: white;
+  border-bottom-color: white;
+}
+
+/* MAIN CONTENT */
+.content { padding: 16px; }
+
+/* SECTION HEADERS */
+.section-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+
+/* CALENDAR */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.cal-month {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.cal-nav-btn {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: 10px;
+  font-family: 'Inter', sans-serif;
+  color: var(--muted);
+  padding: 4px 0 6px;
+  font-weight: 500;
+}
+
+.cal-day {
+  aspect-ratio: 1;
+  position: relative;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  border: 2px solid transparent;
+}
+.cal-day .day-num {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1;
+  padding-bottom: 30%;
+}
+.cal-day .day-band {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 38%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 0 0 4px 4px;
+}
+.cal-day .day-num {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1;
+}
+.cal-day.modified .day-band {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--band-color) 0px,
+    var(--band-color) 3px,
+    var(--band-dark) 3px,
+    var(--band-dark) 6px
+  ) !important;
+}
+.cal-day.empty { cursor: default; background: none !important; }
+.cal-day.empty .day-num { color: var(--border); }
+.cal-day.weekend { background: none !important; }
+.cal-day.weekend .day-num { color: var(--border); }
+.cal-day.holiday .day-num { color: var(--warn); }
+.cal-day.today { border: 2.5px solid var(--text) !important; }
+.cal-day.today .day-num { font-weight: 600; }
+
+/* TURN ROWS */
+.turn-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: all 0.15s;
+}
+
+.turn-card.today-turn {
+  border-color: #9B3A3A;
+  box-shadow: 0 0 0 1px #9B3A3A;
+}
+
+.turn-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.turn-date-col {
+  text-align: center;
+  min-width: 32px;
+}
+
+.turn-day-num {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.turn-day-name {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.turn-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.turn-info { flex: 1; }
+.turn-name { font-size: 14px; font-weight: 500; }
+.turn-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.swap-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  padding: 5px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.swap-btn:active { background: var(--bg); }
+
+.turn-card.holiday-turn {
+  opacity: 0.5;
+}
+
+.holiday-tag {
+  font-size: 10px;
+  color: var(--warn);
+  background: var(--warn-light);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-family: 'Inter', sans-serif;
+}
+
+/* STATS */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.stat-name { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.stat-count {
+  font-family: 'Inter', sans-serif;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1;
+}
+.stat-bar-wrap {
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.stat-bar { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+/* ABSENCE */
+.absence-card {
+  background: var(--warn-light);
+  border: 1px solid #F4C0A8;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.absence-info { flex: 1; }
+.absence-name { font-size: 13px; font-weight: 500; }
+.absence-period { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.del-btn {
+  background: none;
+  border: none;
+  color: var(--warn);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+/* ADD ABSENCE FORM */
+.form-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.form-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 14px;
+}
+
+.form-row { margin-bottom: 12px; }
+.form-label { font-size: 11px; color: var(--muted); margin-bottom: 5px; display: block; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
+
+select, input[type="date"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.form-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+.btn-primary {
+  flex: 1;
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 11px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 16px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* SWAP MODAL */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal-sheet {
+  background: var(--card);
+  border-radius: 20px 20px 0 0;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+
+.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+
+.pickup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pickup-row:last-of-type { border-bottom: none; }
+.pickup-label { flex: 1; font-size: 14px; }
+.pickup-sub { font-size: 11px; color: var(--muted); }
+.pickup-check {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  color: white;
+  transition: all 0.15s;
+}
+.pickup-check.checked {
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  border-color: #9B3A3A;
+}
+
+.note-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  resize: none;
+  margin-top: 14px;
+  height: 70px;
+}
+
+/* PIN SCREEN */
+.pin-screen {
+  position: fixed; inset: 0; z-index: 500;
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px 24px;
+}
+.pin-logo { font-family: 'DM Mono', monospace; font-size: 32px; font-weight: 500; color: white; margin-bottom: 4px; }
+.pin-subtitle { font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px; text-align: center; }
+.pin-instruction { font-size: 14px; color: rgba(255,255,255,0.85); margin-bottom: 28px; text-align: center; }
+.pin-dots { display: flex; gap: 14px; margin-bottom: 36px; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); background: transparent; transition: background 0.15s; }
+.pin-dot.filled { background: white; border-color: white; }
+.pin-dot.error { background: #ea994d; border-color: #ea994d; }
+.pin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 220px; }
+.pin-key {
+  height: 58px; background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 400; color: white; cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.pin-key:active { background: rgba(255,255,255,0.25); }
+.pin-key.empty { background: none; border: none; cursor: default; }
+.pin-key.del { font-size: 16px; color: rgba(255,255,255,0.7); }
+.pin-error-msg { font-size: 13px; color: #ea994d; margin-top: 16px; height: 18px; text-align: center; }
+
+/* WHO ARE YOU screen */
+.who-screen {
+  position: fixed; inset: 0; z-index: 500;
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px 24px;
+}
+.who-title { font-size: 16px; font-weight: 500; color: white; margin-bottom: 6px; }
+.who-sub { font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 28px; text-align: center; }
+.member-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 280px; margin-bottom: 20px; }
+.member-btn {
+  background: rgba(255,255,255,0.1); border: 1.5px solid rgba(255,255,255,0.2);
+  border-radius: 12px; padding: 16px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer; transition: all 0.15s;
+}
+.member-btn:active { background: rgba(255,255,255,0.2); }
+.member-btn.selected { border-color: white; background: rgba(255,255,255,0.2); }
+.member-btn-av {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 500; color: white;
+}
+.member-btn-name { font-size: 13px; font-weight: 500; color: white; }
+.btn-white {
+  background: white; color: #6B1F1F;
+  border: none; border-radius: 10px; padding: 13px;
+  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500;
+  width: 100%; max-width: 280px; cursor: pointer;
+}
+
+/* PROFILE PAGE */
+.profile-page { }
+.profile-header-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 12px;
+}
+.profile-av-lg {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 500; color: white; flex-shrink: 0;
+}
+.profile-name-lg { font-size: 16px; font-weight: 500; }
+.profile-color-name { font-size: 12px; color: var(--muted); margin-top: 2px; font-style: italic; }
+
+.profile-section {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 12px; overflow: hidden;
+}
+.profile-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; border-bottom: 0.5px solid var(--border);
+}
+.profile-row:last-child { border-bottom: none; }
+.profile-label { font-size: 14px; color: var(--text); }
+.profile-arrow { font-size: 16px; color: var(--border); }
+
+.color-picker-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; padding: 16px;
+}
+.color-opt { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.color-swatch {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 2.5px solid transparent; transition: border-color 0.15s;
+}
+.color-swatch.selected { border-color: var(--text); }
+.color-swatch.taken { filter: grayscale(60%) opacity(45%); cursor: default; }
+.color-label { font-size: 10px; color: var(--muted); text-align: center; font-style: italic; line-height: 1.3; }
+.color-label.taken { color: var(--border); }
+
+/* BOTTOM NAV */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 0 20px;
+  z-index: 100;
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 10px;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  background: none;
+  transition: color 0.15s;
+}
+
+.nav-item.active { color: #9B3A3A; }
+
+.nav-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.page { display: none; padding-bottom: 80px; }
+.page.active { display: block; }
+
+/* EMPTY STATE */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+.empty-icon { font-size: 36px; margin-bottom: 12px; }
+.empty-text { font-size: 14px; }
+
+.badge-today {
+  font-size: 10px;
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  color: white;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-family: 'Inter', sans-serif;
+}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="header-top">
+    <div>
+      <div class="app-title" onclick="handleTitleTap()" style="cursor:default;user-select:none">URSS</div>
+      <div class="app-subtitle">Carpooling · Viserba → Cesena</div>
+    </div>
+    <a href="tg://" class="tg-btn" target="_blank">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21.8 2.6L1.2 10.4c-1.3.5-1.3 1.3-.2 1.6l5.2 1.6 2 6.3c.3.8.6 1.1 1.1 1.1.4 0 .6-.2 1-.5l2.5-2.4 5.2 3.9c1 .5 1.6.3 1.9-.9L23 4c.3-1.5-.6-2.1-1.2-1.4z" fill="white"/></svg>
+    </a>
+  </div>
+  <div class="today-hero" id="todayHero">
+    <!-- filled by JS -->
+  </div>
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('turni', this)">Turni</button>
+    <button class="tab-btn" onclick="switchTab('calendario', this)">Calendario</button>
+    <button class="tab-btn" onclick="switchTab('statistiche', this)">Statistiche</button>
+    <button class="tab-btn" id="tabProfilo" onclick="switchTab('profilo', this)" style="display:flex;align-items:center;justify-content:center">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- TURNI PAGE -->
+  <div id="page-turni" class="page active">
+    <div id="turnList"></div>
+  </div>
+
+  <!-- CALENDARIO PAGE -->
+  <div id="page-calendario" class="page">
+    <div class="cal-nav">
+      <button class="cal-nav-btn" onclick="changeMonth(-1)">‹</button>
+      <div class="cal-month" id="calMonthLabel"></div>
+      <button class="cal-nav-btn" onclick="changeMonth(1)">›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+
+    <div class="section-label" style="margin-top:16px">Assenze programmate</div>
+    <div id="absenceList"></div>
+
+    <div class="form-card">
+      <div class="form-title">Aggiungi assenza</div>
+      <div class="form-row">
+        <label class="form-label">Persona</label>
+        <select id="absencePerson">
+          <option value="Ivan">Ivan</option>
+          <option value="Ilaria">Ilaria</option>
+          <option value="Dervis">Dervis</option>
+          <option value="Filippo">Filippo</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Dal</label>
+        <input type="date" id="absenceFrom">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Al</label>
+        <input type="date" id="absenceTo">
+      </div>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
+        <button class="btn-primary" onclick="addAbsence()">Salva assenza</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATISTICHE PAGE -->
+  <div id="page-statistiche" class="page" style="padding-bottom:80px">
+    <div class="section-label">Turni effettuati</div>
+    <div class="stats-grid" id="statsGrid"></div>
+
+  </div>
+
+  <!-- PROFILE PAGE -->
+  <div id="page-profilo" class="page" style="padding-bottom:80px">
+    <div id="profileContent"></div>
+  </div>
+
+</div>
+
+<!-- SECRET RESET MODAL -->
+<div class="modal-overlay" id="secretModal" onclick="if(event.target===this)closeSecretModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">☭ Zona Amministratore</div>
+    <div class="modal-sub" style="margin-top:6px;font-size:13px;color:var(--muted)">Accesso riservato al Comitato Centrale</div>
+    <div style="margin-top:20px">
+      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--muted)">Azzera tutti i contatori a zero. L'operazione non può essere annullata.</div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="closeSecretModal()">Annulla</button>
+        <button class="btn-primary" onclick="confirmReset()">Azzera statistiche</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WHO ARE YOU SCREEN -->
+<div id="whoScreen" class="who-screen" style="display:none">
+  <div class="pin-logo">URSS</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:24px">Carpooling · Viserba → Cesena</div>
+  <div class="who-title">Chi sei, compagno?</div>
+  <div class="who-sub">Seleziona il tuo nome per continuare</div>
+  <div class="member-grid" id="memberGrid"></div>
+  <button class="btn-white" onclick="proceedFromWho()">Continua →</button>
+</div>
+
+<!-- PIN SCREEN -->
+<div id="pinScreen" class="pin-screen" style="display:none">
+  <div class="pin-logo">URSS</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:20px">Carpooling · Viserba → Cesena</div>
+  <div class="pin-instruction" id="pinInstruction">Inserisci il tuo PIN</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot"></div><div class="pin-dot"></div>
+    <div class="pin-dot"></div><div class="pin-dot"></div>
+  </div>
+  <div class="pin-grid">
+    <div class="pin-key" onclick="pinKey('1')">1</div>
+    <div class="pin-key" onclick="pinKey('2')">2</div>
+    <div class="pin-key" onclick="pinKey('3')">3</div>
+    <div class="pin-key" onclick="pinKey('4')">4</div>
+    <div class="pin-key" onclick="pinKey('5')">5</div>
+    <div class="pin-key" onclick="pinKey('6')">6</div>
+    <div class="pin-key" onclick="pinKey('7')">7</div>
+    <div class="pin-key" onclick="pinKey('8')">8</div>
+    <div class="pin-key" onclick="pinKey('9')">9</div>
+    <div class="pin-key empty"></div>
+    <div class="pin-key" onclick="pinKey('0')">0</div>
+    <div class="pin-key del" onclick="pinBackspace()">⌫</div>
+  </div>
+  <div class="pin-error-msg" id="pinError"></div>
+</div>
+
+<!-- COLOR PICKER MODAL -->
+<div class="modal-overlay" id="colorModal" onclick="if(event.target===this)closeColorModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Scegli il tuo colore</div>
+    <div class="color-picker-grid" id="colorPickerGrid"></div>
+    <div class="form-actions" style="padding:0 4px 4px">
+      <button class="btn-secondary" onclick="closeColorModal()">Annulla</button>
+      <button class="btn-primary" onclick="saveColor()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PIN MODAL -->
+<div class="modal-overlay" id="changePinModal" onclick="if(event.target===this)closeChangePinModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Cambia PIN</div>
+    <div style="margin-top:14px">
+      <div class="form-row">
+        <label class="form-label">PIN attuale</label>
+        <input type="password" inputmode="numeric" maxlength="4" id="oldPin" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:18px;letter-spacing:6px;font-family:'Inter',sans-serif">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Nuovo PIN</label>
+        <input type="password" inputmode="numeric" maxlength="4" id="newPin" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:18px;letter-spacing:6px;font-family:'Inter',sans-serif">
+      </div>
+      <div id="changePinError" style="font-size:12px;color:var(--warn);margin-top:6px;height:16px"></div>
+    </div>
+    <div class="form-actions" style="margin-top:14px">
+      <button class="btn-secondary" onclick="closeChangePinModal()">Annulla</button>
+      <button class="btn-primary" onclick="confirmChangePin()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE NAME MODAL -->
+<div class="modal-overlay" id="changeNameModal" onclick="if(event.target===this)closeChangeNameModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nome visualizzato</div>
+    <div style="margin-top:14px">
+      <div class="form-row">
+        <label class="form-label">Nome</label>
+        <input type="text" id="newDisplayName" maxlength="20" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px">
+      </div>
+    </div>
+    <div class="form-actions" style="margin-top:14px">
+      <button class="btn-secondary" onclick="closeChangeNameModal()">Annulla</button>
+      <button class="btn-primary" onclick="confirmChangeName()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- SWAP MODAL -->
+<div class="modal-overlay" id="swapModal" onclick="closeModal(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-sub" id="modalSub"></div>
+    <div id="modalPickups"></div>
+    <textarea class="note-input" id="modalNote" placeholder="Nota (es. cambio orario, punto raccolta alternativo...)"></textarea>
+    <div class="form-actions" style="margin-top:14px">
+      <button class="btn-secondary" onclick="closeSwapModal()">Chiudi</button>
+      <button class="btn-primary" onclick="saveSwap()">Salva modifica</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+
+const DRIVERS = ['Filippo','Dervis','Ivan','Ilaria'];
+const COLORS = {
+  Ivan:    { bg: '#B8E0CC', mid: '#7DC4A0', fg: '#2D6A4F' },
+  Ilaria:  { bg: '#D8CBEF', mid: '#B49FDE', fg: '#6B4C9A' },
+  Dervis:  { bg: '#F5CEBC', mid: '#EAA082', fg: '#C25B2A' },
+  Filippo: { bg: '#C5E4F0', mid: '#8EC9E0', fg: '#1A6B8A' },
+};
+
+// ── PALETTE ───────────────────────────────────────────────────────────────────
+const PALETTE = [
+  { id: 'mortadella', name: 'Mortadella', hex: '#f2cfc9', dark: '#8B3A3A' },
+  { id: 'gnassi',     name: 'Gnassi',     hex: '#dea2a6', dark: '#7A2D35' },
+  { id: 'proletariato', name: 'Proletariato', hex: '#dd785b', dark: '#7A3020' },
+  { id: 'allerta',    name: 'Allerta',    hex: '#ea994d', dark: '#7A4A10' },
+  { id: 'zal',        name: 'Zal',        hex: '#efd353', dark: '#7A6010' },
+  { id: 'fava',       name: 'Fava',       hex: '#c4c66a', dark: '#4A4A10' },
+  { id: 'selvia',     name: 'Selvia',     hex: '#b8caa5', dark: '#3A5028' },
+  { id: 'rockisland', name: 'Rockisland', hex: '#b4d8d4', dark: '#2A5550' },
+  { id: 'gange',      name: 'Gange',      hex: '#80a4aa', dark: '#1A4048' },
+  { id: 'adelia',     name: 'Adelia',     hex: '#d2cbe3', dark: '#4A3870' },
+  { id: 'mlanzana',   name: 'Mlanzâna',   hex: '#a299b8', dark: '#3A2860' },
+  { id: 'dune',       name: 'Dune',       hex: '#c4b28e', dark: '#5A4020' },
+];
+
+function getPaletteColor(id) {
+  return PALETTE.find(p => p.id === id) || PALETTE[0];
+}
+
+function getUserColor(name) {
+  const profile = window.userProfiles && window.userProfiles[name];
+  if (profile && profile.colorId) {
+    const p = getPaletteColor(profile.colorId);
+    return { bg: p.hex + '33', mid: p.hex + '88', fg: p.dark, hex: p.hex };
+  }
+  return COLORS[name] || COLORS['Ivan'];
+}
+
+// ── AUTH STATE ────────────────────────────────────────────────────────────────
+let currentUser = null; // name of logged in user
+
+function hashPin(pin) {
+  // Simple hash for PIN storage — not cryptographic but sufficient
+  let hash = 0;
+  for (let i = 0; i < pin.length; i++) {
+    hash = ((hash << 5) - hash) + pin.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash.toString(16);
+}
+
+// Holidays 2025–2026 + Patron of Cesena (24 giugno)
+const HOLIDAYS = new Set([
+  '2025-01-01','2025-01-06','2025-04-18','2025-04-19','2025-04-20','2025-04-21',
+  '2025-04-25','2025-05-01','2025-06-02','2025-06-24',
+  '2025-08-15','2025-11-01','2025-12-08','2025-12-25','2025-12-26',
+  '2026-01-01','2026-01-06','2026-04-03','2026-04-05','2026-04-06',
+  '2026-04-25','2026-05-01','2026-06-02','2026-06-24',
+  '2026-08-15','2026-11-01','2026-12-08','2026-12-25','2026-12-26',
+]);
+
+const HOLIDAY_NAMES = {
+  '01-01': 'Capodanno', '01-06': 'Epifania',
+  '04-25': 'Liberazione', '05-01': 'Festa Lavoro',
+  '06-02': 'Repubblica', '06-24': 'S. Giovanni (Cesena)',
+  '08-15': 'Ferragosto', '11-01': 'Ognissanti',
+  '12-08': 'Immacolata', '12-25': 'Natale', '12-26': 'S. Stefano',
+};
+
+function isEaster(y) {
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
+        f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+        h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,
+        l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+        month=Math.floor((h+l-7*m+114)/31),
+        day=((h+l-7*m+114)%31)+1;
+  return new Date(y,month-1,day);
+}
+
+function addEasters() {
+  [2025,2026,2027].forEach(y => {
+    const e = isEaster(y);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    HOLIDAYS.add(fmt(e));
+    const lun = new Date(e); lun.setDate(lun.getDate()+1); HOLIDAYS.add(fmt(lun));
+    const ven = new Date(e); ven.setDate(ven.getDate()-2); HOLIDAYS.add(fmt(ven));
+  });
+}
+addEasters();
+
+// State
+// Tomorrow is Dervis → sequence: Dervis, Ivan, Ilaria, Filippo, Dervis...
+// Rotation index: find tomorrow in sequence
+const today = new Date();
+today.setHours(0,0,0,0);
+
+// Build turn schedule starting from tomorrow = Dervis (index 2)
+// We need to figure out what day index we are
+// Anchor: 21 aprile 2026 = Dervis (index 2 in DRIVERS)
+const ANCHOR = new Date(2026, 3, 20); // 20 aprile 2026
+ANCHOR.setHours(0,0,0,0);
+const ANCHOR_DRIVER_IDX = 0; // Filippo
+
+// Store exceptions & absences in memory (would be localStorage in production)
+window.exceptions = window.exceptions || {};
+let exceptions = window.exceptions; // dateStr -> { note, driver }
+window.userProfiles = {}; // userId -> { color, pin, name }
+let absences = []; // [{person, from, to}]
+let turnCounts = { Ivan: 0, Ilaria: 0, Dervis: 0, Filippo: 0 };
+
+// Count working days between two dates (exclusive of start, inclusive of end if forward)
+function countWorkingDays(from, to) {
+  let count = 0;
+  const d = new Date(from);
+  d.setHours(0,0,0,0);
+  const t = new Date(to);
+  t.setHours(0,0,0,0);
+  if (t > d) {
+    d.setDate(d.getDate()+1);
+    while (d <= t) {
+      if (!isWeekend(d) && !isHoliday(d)) count++;
+      d.setDate(d.getDate()+1);
+    }
+  } else if (t < d) {
+    d.setDate(d.getDate()-1);
+    while (d >= t) {
+      if (!isWeekend(d) && !isHoliday(d)) count++;
+      d.setDate(d.getDate()-1);
+    }
+  }
+  return count;
+}
+
+function getDriverForDate(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  const wd = countWorkingDays(ANCHOR, d);
+  if (d >= ANCHOR) {
+    return DRIVERS[(ANCHOR_DRIVER_IDX + wd) % 4];
+  } else {
+    return DRIVERS[((ANCHOR_DRIVER_IDX - wd) % 4 + 4) % 4];
+  }
+}
+
+function isWeekend(d) { return d.getDay()===0 || d.getDay()===6; }
+function isHoliday(d) { return HOLIDAYS.has(toDateStr(d)); }
+function isWorkDay(d) { return !isWeekend(d) && !isHoliday(d); }
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function isAbsent(person, dateStr) {
+  return absences.some(a => a.person===person && a.from<=dateStr && a.to>=dateStr);
+}
+
+function getEffectiveDriver(date) {
+  const ds = toDateStr(date);
+  if (exceptions[ds] && exceptions[ds].driver) return exceptions[ds].driver;
+  const base = getDriverForDate(date);
+  // If absent, skip to next
+  if (isAbsent(base, ds)) {
+    // find next available
+    for (let i=1; i<4; i++) {
+      const alt = DRIVERS[(DRIVERS.indexOf(base)+i)%4];
+      if (!isAbsent(alt, ds)) return alt;
+    }
+  }
+  return base;
+}
+
+// ── RENDER TODAY HERO ─────────────────────────────────────────────────────────
+function renderHero() {
+  const hero = document.getElementById('todayHero');
+  let d = today;
+  let label = 'Oggi guida';
+  const dayNames = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  if (!isWorkDay(today)) {
+    d = new Date(today);
+    do { d.setDate(d.getDate()+1); } while (!isWorkDay(d));
+    label = 'Prossimo turno';
+  }
+  const dateLabel = ` · ${dayNames[d.getDay()]} ${d.getDate()}`;
+  const ds = toDateStr(d);
+  const driver = getEffectiveDriver(d);
+  const col = getUserColor(driver);
+  const note = exceptions[ds]?.note || '';
+  hero.innerHTML = `
+    <div class="hero-avatar" style="background:${col.hex || col.fg}">${driver[0]}</div>
+    <div class="hero-info">
+      <div class="hero-label">${label}${dateLabel}</div>
+      <div class="hero-name">${driver}</div>
+      <div class="hero-detail">Via Tarkowskij · 07:45${note ? ' · ' + note : ''}</div>
+    </div>
+    <button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${dayNames[d.getDay()]}', 'placeholder')">modifica</button>
+  `;
+}
+
+// ── RENDER TURN LIST ──────────────────────────────────────────────────────────
+function renderTurnList() {
+  const list = document.getElementById('turnList');
+  const days = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  const months = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+  let html = '';
+  // Find the hero day (same logic as renderHero)
+  let heroDay = new Date(today);
+  if (!isWorkDay(heroDay)) {
+    do { heroDay.setDate(heroDay.getDate()+1); } while (!isWorkDay(heroDay));
+  }
+  const heroDayStr = toDateStr(heroDay);
+
+  let shown = 0;
+  let d = new Date(today);
+  // show up to 14 working days
+  for (let i=0; i<60 && shown<14; i++) {
+    if (isWorkDay(d) && toDateStr(d) !== heroDayStr) {
+      const ds = toDateStr(d);
+      const driver = getEffectiveDriver(d);
+      const baseDriver = getDriverForDate(d);
+      const c = getUserColor(driver);
+      const isToday = ds === toDateStr(today);
+      const isModified = exceptions[ds] && exceptions[ds].driver && exceptions[ds].driver !== baseDriver;
+      const note = exceptions[ds]?.note || '';
+      const avatarStyle = isModified
+        ? `background: repeating-linear-gradient(45deg, ${c.bg} 0px, ${c.bg} 3px, ${c.mid} 3px, ${c.mid} 6px); color:${c.fg}`
+        : `background:${c.bg};color:${c.fg}`;
+      const subText = isModified ? 'turno modificato' : (note || 'Via Tarkowskij · 07:45');
+      const subStyle = isModified ? 'font-style:italic;color:var(--warn)' : '';
+      html += `
+        <div class="turn-card ${isToday?'today-turn':''}">
+          <div class="turn-row">
+            <div class="turn-date-col">
+              <div class="turn-day-num">${d.getDate()}</div>
+              <div class="turn-day-name">${days[d.getDay()]}</div>
+            </div>
+            <div class="turn-avatar" style="${avatarStyle}">${driver[0]}</div>
+            <div class="turn-info">
+              <div class="turn-name">${driver} ${isToday?'<span class="badge-today">oggi</span>':''}</div>
+              <div class="turn-sub" style="${subStyle}">${subText}</div>
+            </div>
+            <button class="swap-btn" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${days[d.getDay()]}', '${months[d.getMonth()]}')">modifica</button>
+          </div>
+        </div>`;
+      shown++;
+    }
+    d.setDate(d.getDate()+1);
+  }
+  list.innerHTML = html;
+}
+
+function getHolidayName(ds) {
+  if (!HOLIDAYS.has(ds)) return null;
+  const mmdd = ds.slice(5);
+  return HOLIDAY_NAMES[mmdd] || 'Festivo';
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────────────────────
+let calYear = today.getFullYear();
+let calMonth = today.getMonth();
+
+function renderCalendar() {
+  const months = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                  'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  document.getElementById('calMonthLabel').textContent = `${months[calMonth]} ${calYear}`;
+  const grid = document.getElementById('calGrid');
+  const dows = ['Lun','Mar','Mer','Gio','Ven'];
+  let html = dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const first = new Date(calYear, calMonth, 1);
+  const firstDow = (first.getDay()+6)%7; // Mon=0 ... Sun=6
+  const offset = firstDow <= 4 ? firstDow : 0;
+
+  const slots = [];
+  for (let i=0; i<offset; i++) slots.push(null);
+  for (let dd=1; dd<=daysInMonth; dd++) {
+    const d = new Date(calYear, calMonth, dd);
+    const dow = (d.getDay()+6)%7;
+    if (dow <= 4) slots.push(dd);
+  }
+  while (slots.length % 5 !== 0) slots.push(null);
+
+  slots.forEach(dd => {
+    if (dd === null) { html += '<div class="cal-day empty"></div>'; return; }
+    const d = new Date(calYear, calMonth, dd);
+    const ds = toDateStr(d);
+    const isToday = ds===toDateStr(today);
+    const holiday = isHoliday(d);
+    let bandHtml = '';
+    let tileStyle = '';
+    let modClass = '';
+    if (!holiday) {
+      const driver = getEffectiveDriver(d);
+      const baseDriver = getDriverForDate(d);
+      const col = getUserColor(driver);
+      const isModified = exceptions[ds] && exceptions[ds].driver && exceptions[ds].driver !== baseDriver;
+      tileStyle = `background:${col.fg}0D`;
+      const driverLabel = driver.length > 8 ? driver.slice(0,4).toUpperCase() + '.' : driver.toUpperCase();
+      bandHtml = `<div class="day-band" style="background:${col.mid};color:${col.fg};--band-color:${col.mid};--band-dark:${col.fg}">${driverLabel}</div>`;
+      if (isModified) modClass = 'modified';
+    } else {
+      bandHtml = `<div class="day-band">fest</div>`;
+    }
+    const cls = ['cal-day', isToday?'today':'', holiday?'holiday':'', modClass].filter(Boolean).join(' ');
+    html += `<div class="${cls}" style="${tileStyle}"><span class="day-num">${dd}</span>${bandHtml}</div>`;
+  });
+
+  grid.innerHTML = html;
+}
+
+function changeMonth(dir) {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth=0; calYear++; }
+  if (calMonth < 0) { calMonth=11; calYear--; }
+  renderCalendar();
+}
+
+// ── STATS ─────────────────────────────────────────────────────────────────────
+// turniCompletati: { 'YYYY-MM-DD': 'NomeGuidatore' }
+let turniCompletati = {};
+let resetDate = '2026-04-27';
+
+function renderStats() {
+  const counts = { Ivan:0, Ilaria:0, Dervis:0, Filippo:0 };
+  Object.entries(turniCompletati).forEach(([ds, driver]) => {
+    if (ds >= resetDate && DRIVERS.includes(driver)) counts[driver]++;
+  });
+  const max = Math.max(...Object.values(counts)) || 1;
+  let html = '';
+  DRIVERS.forEach(name => {
+    const col = getUserColor(name);
+    const pct = Math.round((counts[name]/max)*100);
+    html += `
+      <div class="stat-card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="width:28px;height:28px;border-radius:50%;background:${col.bg};color:${col.fg};display:flex;align-items:center;justify-content:center;font-size:12px;font-family:'Inter',sans-serif">${name[0]}</div>
+          <div class="stat-name" style="margin:0">${name}</div>
+        </div>
+        <div class="stat-count" style="color:${col.fg}">${counts[name]}</div>
+        <div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%;background:${col.fg}"></div></div>
+      </div>`;
+  });
+  document.getElementById('statsGrid').innerHTML = html;
+}
+
+async function loadTurniCompletati() {
+  if (!window._db) return;
+  try {
+    // Load reset date
+    const resetDoc = await window._fsGetDoc(window._fsDoc(window._db, 'config', 'resetDate'));
+    if (resetDoc.exists()) resetDate = resetDoc.data().date || '2026-01-01';
+
+    // Load completed turns
+    const snap = await window._fsGetDocs(window._fsColl(window._db, 'turni_completati'));
+    turniCompletati = {};
+    snap.forEach(d => { turniCompletati[d.id] = d.data().driver; });
+
+    renderStats();
+  } catch(e) { console.warn('loadTurniCompletati error', e); renderStats(); }
+}
+
+async function backfillTurni() {
+  // Backfill disabled — turni are recorded only by the bot each evening
+  // This prevents historical data from being auto-generated
+}
+
+async function saveTurnoOggi() {
+  const ds = toDateStr(today);
+  if (!isWorkDay(today)) return;
+  const driver = getEffectiveDriver(today);
+  turniCompletati[ds] = driver;
+  if (window._fsSetDoc) {
+    try {
+      await window._fsSetDoc(window._fsDoc(window._db, 'turni_completati', ds), { driver, auto: false });
+    } catch(e) {}
+  }
+}
+
+function renderAbsences() {
+  const list = document.getElementById('absenceList');
+  if (!absences.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏖</div><div class="empty-text">Nessuna assenza programmata</div></div>';
+    return;
+  }
+  let html = '';
+  absences.forEach((a,i) => {
+    const c = getUserColor(a.person);
+    html += `
+      <div class="absence-card">
+        <div style="width:32px;height:32px;border-radius:50%;background:${c.bg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:13px">${a.person[0]}</div>
+        <div class="absence-info">
+          <div class="absence-name">${a.person}</div>
+          <div class="absence-period">${formatDate(a.from)} → ${formatDate(a.to)}</div>
+        </div>
+        <button class="del-btn" onclick="removeAbsence(${i})">×</button>
+      </div>`;
+  });
+  list.innerHTML = html;
+}
+
+function formatDate(ds) {
+  const [y,m,d] = ds.split('-');
+  const months = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+  return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+}
+
+function addAbsence() {
+  const person = document.getElementById('absencePerson').value;
+  const from = document.getElementById('absenceFrom').value;
+  const to = document.getElementById('absenceTo').value;
+  if (!from || !to) { alert('Seleziona le date'); return; }
+  if (from > to) { alert('La data di fine deve essere dopo quella di inizio'); return; }
+  const newAbsence = { person, from, to, note: '' };
+  absences.push(newAbsence);
+  if (window._saveAbsence) window._saveAbsence(newAbsence);
+
+  // Notify bot via webhook
+  if (window._BOT_WEBHOOK) {
+    fetch(window._BOT_WEBHOOK + '/notify-absence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ person, from, to, note: '' })
+    }).catch(e => console.warn('Webhook error:', e));
+  }
+
+  clearAbsenceForm();
+  renderAbsences();
+  renderStats();
+  renderTurnList();
+  renderHero();
+  renderCalendar();
+}
+
+function removeAbsence(i) {
+  const absence = absences[i];
+  if (window._deleteAbsence) window._deleteAbsence(absence);
+  absences.splice(i,1);
+  renderAbsences();
+  renderStats();
+  renderTurnList();
+  renderHero();
+  renderCalendar();
+}
+
+function clearAbsenceForm() {
+  document.getElementById('absenceFrom').value = '';
+  document.getElementById('absenceTo').value = '';
+}
+
+// ── SWAP MODAL ────────────────────────────────────────────────────────────────
+let currentSwapDate = null;
+
+function openSwapModal(ds, driver, dayNum, dayName, monthName) {
+  currentSwapDate = ds;
+  document.getElementById('modalTitle').textContent = `${dayName} ${dayNum} ${monthName}`;
+  document.getElementById('modalSub').textContent = `Turno di ${driver} · Via Tarkowskij 07:45`;
+  const ex = exceptions[ds] || {};
+  document.getElementById('modalNote').value = ex.note || '';
+
+  // Driver selector
+  let html = '<div class="section-label" style="margin-bottom:8px">Assegna a</div>';
+  DRIVERS.forEach(name => {
+    const c = getUserColor(name);
+    const sel = (ex.driver===name || (!ex.driver && name===driver));
+    html += `
+      <div class="pickup-row" onclick="selectDriver('${name}', '${ds}')">
+        <div style="width:30px;height:30px;border-radius:50%;background:${c.bg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:12px">${name[0]}</div>
+        <div class="pickup-label">${name}</div>
+        <div class="pickup-check ${sel?'checked':''}" id="driverCheck_${name}">✓</div>
+      </div>`;
+  });
+  document.getElementById('modalPickups').innerHTML = html;
+  document.getElementById('swapModal').classList.add('open');
+}
+
+function selectDriver(name, ds) {
+  document.querySelectorAll('[id^="driverCheck_"]').forEach(el => el.classList.remove('checked'));
+  document.getElementById('driverCheck_'+name).classList.add('checked');
+}
+
+function saveSwap() {
+  const ds = currentSwapDate;
+  const selectedCheck = document.querySelector('[id^="driverCheck_"].checked');
+  const note = document.getElementById('modalNote').value.trim();
+  if (selectedCheck) {
+    const driver = selectedCheck.id.replace('driverCheck_','');
+    exceptions[ds] = { driver, note };
+    if (window._saveException) window._saveException(ds, { driver, note });
+  } else if (note) {
+    exceptions[ds] = { ...(exceptions[ds]||{}), note };
+    if (window._saveException) window._saveException(ds, exceptions[ds]);
+  }
+  closeSwapModal();
+  renderTurnList();
+  renderHero();
+  renderCalendar();
+  // If modifying today or past day, update turni_completati
+  if (currentSwapDate <= toDateStr(today)) saveTurnoOggi();
+}
+
+function closeSwapModal() {
+  document.getElementById('swapModal').classList.remove('open');
+  currentSwapDate = null;
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('swapModal')) closeSwapModal();
+}
+
+// ── SECRET PANEL ──────────────────────────────────────────────────────────────
+let titleTapCount = 0;
+let titleTapTimer = null;
+
+function handleTitleTap() {
+  titleTapCount++;
+  clearTimeout(titleTapTimer);
+  titleTapTimer = setTimeout(() => { titleTapCount = 0; }, 3000);
+  if (titleTapCount >= 6) {
+    titleTapCount = 0;
+    openSecretModal();
+  }
+}
+
+function openSecretModal() {
+  document.getElementById('secretModal').classList.add('open');
+}
+
+function closeSecretModal() {
+  document.getElementById('secretModal').classList.remove('open');
+}
+
+async function confirmReset() {
+  const newDate = new Date().toISOString().slice(0,10);
+  resetDate = newDate;
+
+  // Clear ALL turni from memory
+  turniCompletati = {};
+
+  // Delete ALL turni_completati from Firestore
+  if (window._db) {
+    try {
+      const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+      const snap = await window._fsGetDocs(window._fsColl(window._db, 'turni_completati'));
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+      }
+    } catch(e) { console.warn('Reset delete error', e); }
+  }
+
+  // Save new reset date to Firestore
+  if (window._fsSetDoc) {
+    try {
+      await window._fsSetDoc(window._fsDoc(window._db, 'config', 'resetDate'), { date: resetDate });
+    } catch(e) {}
+  }
+
+  // Do NOT backfill — start fresh from today
+  closeSecretModal();
+  renderStats();
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+let pinBuffer = '';
+let pinMode = 'login'; // 'login' | 'set' | 'confirm'
+let pinSetFirst = '';
+let pendingUser = null;
+
+function showWhoScreen() {
+  document.getElementById('whoScreen').style.display = 'flex';
+  document.getElementById('pinScreen').style.display = 'none';
+  renderMemberGrid();
+}
+
+function renderMemberGrid() {
+  const grid = document.getElementById('memberGrid');
+  grid.innerHTML = DRIVERS.map(name => {
+    const col = getUserColor(name);
+    return `<div class="member-btn" id="mbtn_${name}" onclick="selectMember('${name}')">
+      <div class="member-btn-av" style="background:${col.hex || col.fg}">${name[0]}</div>
+      <div class="member-btn-name">${name}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectMember(name) {
+  pendingUser = name;
+  document.querySelectorAll('.member-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('mbtn_' + name).classList.add('selected');
+}
+
+function proceedFromWho() {
+  if (!pendingUser) return;
+  const profile = window.userProfiles[pendingUser];
+  document.getElementById('whoScreen').style.display = 'none';
+  document.getElementById('pinScreen').style.display = 'flex';
+  if (!profile || !profile.pin) {
+    // New user — set PIN
+    pinMode = 'set';
+    document.getElementById('pinInstruction').textContent = `Ciao ${pendingUser}! Scegli il tuo PIN`;
+  } else {
+    pinMode = 'login';
+    document.getElementById('pinInstruction').textContent = 'Inserisci il tuo PIN';
+  }
+  pinBuffer = '';
+  updatePinDots();
+}
+
+function pinKey(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  updatePinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(handlePinComplete, 120);
+  }
+}
+
+function pinBackspace() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  updatePinDots();
+  document.getElementById('pinError').textContent = '';
+  document.querySelectorAll('.pin-dot').forEach(d => d.classList.remove('error'));
+}
+
+function updatePinDots(error = false) {
+  const dots = document.querySelectorAll('.pin-dot');
+  dots.forEach((dot, i) => {
+    dot.classList.toggle('filled', i < pinBuffer.length && !error);
+    dot.classList.toggle('error', i < pinBuffer.length && error);
+  });
+}
+
+async function handlePinComplete() {
+  if (pinMode === 'login') {
+    const profile = window.userProfiles[pendingUser];
+    if (hashPin(pinBuffer) === profile.pin) {
+      await loginUser(pendingUser);
+    } else {
+      document.getElementById('pinError').textContent = 'PIN errato. Riprova.';
+      updatePinDots(true);
+      setTimeout(() => {
+        pinBuffer = '';
+        updatePinDots();
+        document.getElementById('pinError').textContent = '';
+      }, 800);
+    }
+  } else if (pinMode === 'set') {
+    pinSetFirst = pinBuffer;
+    pinBuffer = '';
+    pinMode = 'confirm';
+    document.getElementById('pinInstruction').textContent = 'Conferma il PIN';
+    updatePinDots();
+  } else if (pinMode === 'confirm') {
+    if (pinBuffer === pinSetFirst) {
+      // Save PIN and proceed to color selection
+      const hashedPin = hashPin(pinBuffer);
+      await window._saveProfile(pendingUser, { pin: hashedPin, name: pendingUser });
+      window.userProfiles[pendingUser] = { ...(window.userProfiles[pendingUser] || {}), pin: hashedPin, name: pendingUser };
+      document.getElementById('pinScreen').style.display = 'none';
+      openColorModalForNewUser();
+    } else {
+      document.getElementById('pinError').textContent = 'I PIN non coincidono. Riprova.';
+      updatePinDots(true);
+      setTimeout(() => {
+        pinBuffer = '';
+        pinMode = 'set';
+        document.getElementById('pinInstruction').textContent = 'Scegli il tuo PIN';
+        updatePinDots();
+        document.getElementById('pinError').textContent = '';
+      }, 800);
+    }
+  }
+}
+
+async function loginUser(name) {
+  currentUser = name;
+  localStorage.setItem('urss_user', name);
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('whoScreen').style.display = 'none';
+  updateTabLabel();
+  renderHero();
+  renderTurnList();
+}
+
+function updateTabLabel() {
+  // Tab now shows gear icon, no text to update
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('urss_user');
+  switchTab('turni', document.querySelector('.tab-btn'));
+  document.getElementById('tabProfilo').textContent = 'Profilo';
+  showAuthFlow();
+}
+
+async function showAuthFlow() {
+  await window._loadProfiles();
+  const saved = localStorage.getItem('urss_user');
+  if (saved && window.userProfiles[saved]) {
+    // Riconosci automaticamente senza PIN
+    await loginUser(saved);
+  } else {
+    showWhoScreen();
+  }
+}
+
+// ── COLOR PICKER ───────────────────────────────────────────────────────────────
+let selectedColorId = null;
+let colorModalForNewUser = false;
+
+function openColorModalForNewUser() {
+  colorModalForNewUser = true;
+  const profile = window.userProfiles[pendingUser] || {};
+  selectedColorId = profile.colorId || null;
+  renderColorPicker();
+  document.getElementById('colorModal').classList.add('open');
+}
+
+function openColorModal() {
+  colorModalForNewUser = false;
+  const profile = window.userProfiles[currentUser] || {};
+  selectedColorId = profile.colorId || null;
+  renderColorPicker();
+  document.getElementById('colorModal').classList.add('open');
+}
+
+function renderColorPicker() {
+  const takenColors = new Set();
+  DRIVERS.forEach(name => {
+    if (name !== (colorModalForNewUser ? pendingUser : currentUser)) {
+      const p = window.userProfiles[name];
+      if (p && p.colorId) takenColors.add(p.colorId);
+    }
+  });
+  const grid = document.getElementById('colorPickerGrid');
+  grid.innerHTML = PALETTE.map(p => {
+    const isTaken = takenColors.has(p.id);
+    const isSelected = p.id === selectedColorId;
+    return `<div class="color-opt" onclick="${isTaken ? '' : `selectColor('${p.id}')`}">
+      <div class="color-swatch ${isSelected ? 'selected' : ''} ${isTaken ? 'taken' : ''}"
+           id="swatch_${p.id}" style="background:${p.hex}"></div>
+      <div class="color-label ${isTaken ? 'taken' : ''}">${p.name}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectColor(id) {
+  selectedColorId = id;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  const el = document.getElementById('swatch_' + id);
+  if (el) el.classList.add('selected');
+}
+
+async function saveColor() {
+  if (!selectedColorId) return;
+  const user = colorModalForNewUser ? pendingUser : currentUser;
+  await window._saveProfile(user, { colorId: selectedColorId });
+  window.userProfiles[user] = { ...(window.userProfiles[user] || {}), colorId: selectedColorId };
+  closeColorModal();
+  if (colorModalForNewUser) {
+    await loginUser(pendingUser);
+  } else {
+    renderProfilePage();
+    renderHero();
+    renderTurnList();
+    renderCalendar();
+  }
+}
+
+function closeColorModal() {
+  document.getElementById('colorModal').classList.remove('open');
+}
+
+// ── CHANGE PIN ────────────────────────────────────────────────────────────────
+function openChangePinModal() {
+  document.getElementById('oldPin').value = '';
+  document.getElementById('newPin').value = '';
+  document.getElementById('changePinError').textContent = '';
+  document.getElementById('changePinModal').classList.add('open');
+}
+
+function closeChangePinModal() {
+  document.getElementById('changePinModal').classList.remove('open');
+}
+
+async function confirmChangePin() {
+  const oldPin = document.getElementById('oldPin').value;
+  const newPin = document.getElementById('newPin').value;
+  const profile = window.userProfiles[currentUser];
+  if (hashPin(oldPin) !== profile.pin) {
+    document.getElementById('changePinError').textContent = 'PIN attuale errato';
+    return;
+  }
+  if (newPin.length !== 4 || !/^[0-9]+$/.test(newPin)) {
+    document.getElementById('changePinError').textContent = 'Il nuovo PIN deve essere 4 cifre';
+    return;
+  }
+  const hashedPin = hashPin(newPin);
+  await window._saveProfile(currentUser, { pin: hashedPin });
+  window.userProfiles[currentUser].pin = hashedPin;
+  closeChangePinModal();
+}
+
+// ── CHANGE NAME ───────────────────────────────────────────────────────────────
+function openChangeNameModal() {
+  const profile = window.userProfiles[currentUser] || {};
+  document.getElementById('newDisplayName').value = profile.name || currentUser;
+  document.getElementById('changeNameModal').classList.add('open');
+}
+
+function closeChangeNameModal() {
+  document.getElementById('changeNameModal').classList.remove('open');
+}
+
+async function confirmChangeName() {
+  const name = document.getElementById('newDisplayName').value.trim();
+  if (!name) return;
+  await window._saveProfile(currentUser, { name });
+  window.userProfiles[currentUser] = { ...(window.userProfiles[currentUser] || {}), name };
+  closeChangeNameModal();
+  updateTabLabel();
+  renderProfilePage();
+}
+
+// ── PROFILE PAGE ──────────────────────────────────────────────────────────────
+function renderProfilePage() {
+  if (!currentUser) return;
+  const profile = window.userProfiles[currentUser] || {};
+  const displayName = profile.name || currentUser;
+  const colorId = profile.colorId;
+  const paletteColor = colorId ? getPaletteColor(colorId) : null;
+  const bgColor = paletteColor ? paletteColor.hex : '#9B3A3A';
+  const colorName = paletteColor ? paletteColor.name : 'Nessun colore';
+
+  document.getElementById('profileContent').innerHTML = `
+    <div class="profile-header-card">
+      <div class="profile-av-lg" style="background:${bgColor}">${currentUser[0]}</div>
+      <div>
+        <div class="profile-name-lg">${displayName}</div>
+        <div class="profile-color-name">${colorName}</div>
+      </div>
+    </div>
+    <div class="section-label" style="margin-bottom:8px">Il tuo colore</div>
+    <div class="profile-section">
+      <div class="color-picker-grid" id="colorPickerGridProfile"></div>
+      <div style="padding:0 16px 14px">
+        <button class="btn-primary" onclick="openColorModal()">Cambia colore</button>
+      </div>
+    </div>
+    <div class="profile-section">
+      <div class="profile-row" onclick="openChangeNameModal()" style="cursor:pointer">
+        <div class="profile-label">Nome visualizzato</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;color:var(--muted)">${displayName}</span>
+          <span class="profile-arrow">›</span>
+        </div>
+      </div>
+      <div class="profile-row" onclick="openChangePinModal()" style="cursor:pointer">
+        <div class="profile-label">Cambia PIN</div>
+        <div class="profile-arrow">›</div>
+      </div>
+    </div>
+    <div class="profile-section">
+      <div class="profile-row" onclick="logout()" style="cursor:pointer">
+        <div class="profile-label" style="color:#dd785b">Logout</div>
+        <div class="profile-arrow" style="color:#dd785b">›</div>
+      </div>
+    </div>`;
+
+  // Render mini color preview
+  renderMiniColorPicker();
+}
+
+function renderMiniColorPicker() {
+  const takenColors = new Set();
+  DRIVERS.forEach(name => {
+    if (name !== currentUser) {
+      const p = window.userProfiles[name];
+      if (p && p.colorId) takenColors.add(p.colorId);
+    }
+  });
+  const profile = window.userProfiles[currentUser] || {};
+  const grid = document.getElementById('colorPickerGridProfile');
+  if (!grid) return;
+  grid.innerHTML = PALETTE.map(p => {
+    const isTaken = takenColors.has(p.id);
+    const isSelected = p.id === profile.colorId;
+    return `<div class="color-opt">
+      <div class="color-swatch ${isSelected ? 'selected' : ''} ${isTaken ? 'taken' : ''}" style="background:${p.hex}"></div>
+      <div class="color-label ${isTaken ? 'taken' : ''}">${p.name}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── UPDATE switchTab ──────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if (name==='statistiche') { renderStats(); loadTurniCompletati(); }
+  if (name==='calendario') { renderCalendar(); renderAbsences(); }
+  if (name==='profilo') renderProfilePage();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await window._loadProfiles();
+  // Set up real-time listeners (they will trigger renders automatically)
+  if (window._loadExceptions) window._loadExceptions();
+  if (window._loadAbsences) window._loadAbsences();
+  // Initial render with any cached data
+  renderHero();
+  renderTurnList();
+  renderCalendar();
+  loadTurniCompletati();
+  showAuthFlow();
+}
+
+document.addEventListener('DOMContentLoaded', () => { setTimeout(init, 600); });
+</script>
+</body>
+</html>
