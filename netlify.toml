@@ -1,0 +1,11 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[[plugins]]
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions."send-daily-push"]
+  schedule = "45 19 * * 0-4"
