@@ -735,6 +735,23 @@ select, input[type="date"] {
 
 /* PROFILE PAGE */
 .profile-page { }
+
+/* TOGGLE */
+.toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; background: #E0DDD6;
+  border-radius: 13px; cursor: pointer; transition: background 0.2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute;
+  width: 20px; height: 20px; left: 3px; top: 3px;
+  background: white; border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.toggle-switch input:checked + .toggle-slider { background: #9B3A3A; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 .profile-header-card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 16px;
@@ -1471,6 +1488,8 @@ function addAbsence() {
       body: JSON.stringify({ person, from, to, note: '' })
     }).catch(e => console.warn('Webhook error:', e));
   }
+  // Push notification to all
+  sendPushToAll('assenza', '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
 
   clearAbsenceForm();
   renderAbsences();
@@ -1543,8 +1562,13 @@ function saveSwap() {
   renderTurnList();
   renderHero();
   renderCalendar();
-  // If modifying today or past day, update turni_completati
   if (currentSwapDate <= toDateStr(today)) saveTurnoOggi();
+  // Notify others of turn change
+  if (selectedCheck) {
+    const changedDriver = selectedCheck.id.replace('driverCheck_','');
+    const ds = currentSwapDate || '';
+    if (ds) sendPushToAll('cambio', '🔄 Cambio turno', `${currentUser} ha modificato il turno del ${ds} → ${changedDriver}`);
+  }
 }
 
 function closeSwapModal() {
@@ -1576,6 +1600,36 @@ function openSecretModal() {
 
 function closeSecretModal() {
   document.getElementById('secretModal').classList.remove('open');
+}
+
+// ── NOTIFICATION PREFS ────────────────────────────────────────────────────────
+async function saveNotifPref(type, value) {
+  if (!currentUser) return;
+  const profile = window.userProfiles[currentUser] || {};
+  const notifPrefs = { serale: value, cambio: value, assenza: value };
+  window.userProfiles[currentUser] = { ...profile, notifPrefs };
+  if (window._saveProfile) await window._saveProfile(currentUser, { notifPrefs });
+  if (value) {
+    registerPush();
+  } else {
+    // Remove subscription from Firestore
+    await fetch('/.netlify/functions/save-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: null, userId: currentUser })
+    }).catch(e => console.warn(e));
+  }
+}
+
+// Send push to all users with a specific pref enabled
+async function sendPushToAll(type, title, body) {
+  try {
+    await fetch('/.netlify/functions/send-push-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, title, body })
+    });
+  } catch(e) { console.warn('Push event error:', e); }
 }
 
 async function confirmReset() {
@@ -1910,6 +1964,15 @@ function renderProfilePage() {
       <div class="profile-row" onclick="openChangePinModal()" style="cursor:pointer">
         <div class="profile-label">Cambia PIN</div>
         <div class="profile-arrow">›</div>
+      </div>
+    </div>
+    <div class="profile-section">
+      <div class="profile-row">
+        <div class="profile-label">Notifiche</div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggleNotifiche" ${notifSerale ? 'checked' : ''} onchange="saveNotifPref('all', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
     </div>
     <div class="profile-section">
