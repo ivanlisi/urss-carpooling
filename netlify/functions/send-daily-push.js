@@ -60,8 +60,53 @@ const MONTHS = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
                 'luglio','agosto','settembre','ottobre','novembre','dicembre'];
 const DAYS = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 
+const WEEKEND_PHRASES = [
+  "Il proletariato del carpooling ha completato un'altra settimana di onorevole servizio. Riposate, compagni.",
+  "La Quinta Marcia verso Cesena è conclusa. Il Partito è soddisfatto della vostra produttività.",
+  "Cinque giorni di gloriosa mobilità collettiva. L'automobile ringrazia, il pianeta pure.",
+  "Il Comitato Centrale del Carpooling decreta: meritato riposo per tutti i membri del collettivo.",
+  "Un'altra settimana di turni equamente distribuiti secondo i principi marxisti-automobilistici.",
+  "Il motore tace, i compagni riposano. Così recita il Grande Libro dei Turni.",
+  "La via Tarkowskij è stata percorsa con onore. Ora è tempo di riposo rivoluzionario.",
+  "Cinque giorni, quattro guidatori, zero disorganizzazione. La collettivizzazione funziona.",
+  "Viserba-Cesena, andata e ritorno, per cinque giorni. L'eroismo quotidiano non fa rumore.",
+  "Il carpooling è la forma più alta di comunismo applicato. Buon weekend, camarade.",
+  "Nessun compagno è stato lasciato a piedi questa settimana. La missione è compiuta.",
+  "La settimana si chiude. L'URSS del carpooling non dorme mai — ma nel weekend ci prova.",
+  "Ogni lunedì è una rivoluzione, ogni venerdì una vittoria. Buon weekend, compagni!",
+  "Il collettivo ha navigato la settimana con la grazia di un Lada su strada asfaltata.",
+];
+
 exports.handler = async () => {
   const now = new Date();
+
+  // Saturday morning: send weekend message
+  if (now.getUTCDay() === 6) {
+    const weekNumber = Math.floor(now.getTime() / (7 * 24 * 60 * 60 * 1000));
+    const phrase = WEEKEND_PHRASES[weekNumber % WEEKEND_PHRASES.length]
+      .replace(/[Bb]uon weekend[^.!]*[.!]?\s*/g, '').trim();
+
+    const subsSnap = await db.collection('push_subscriptions').get();
+    const profilesSnap = await db.collection('profiles').get();
+    const profiles = {};
+    profilesSnap.forEach(d => { profiles[d.id] = d.data(); });
+
+    for (const doc of subsSnap.docs) {
+      const { subscription } = doc.data();
+      if (!subscription) continue;
+      const prefs = profiles[doc.id]?.notifPrefs || { serale: true };
+      if (prefs.serale === false) continue;
+      try {
+        await webpush.sendNotification(subscription, JSON.stringify({
+          title: '☭ Buon weekend, compagni!',
+          body: phrase
+        }));
+      } catch(e) {
+        if (e.statusCode === 410) await doc.ref.delete();
+      }
+    }
+    return { statusCode: 200, body: 'Weekend message sent' };
+  }
 
   // Find next working day
   const target = new Date(toDateStr(now) + 'T00:00:00Z');
