@@ -53,7 +53,6 @@ body::before {
   window._fsSetDoc = setDoc;
   window._fsColl = collection;
   window._fsGetDocs = getDocs;
-  window._BOT_WEBHOOK = 'https://distinguished-elegance-production-b3ac.up.railway.app';
 
   // Save/load user profiles
   window._saveProfile = async function(userId, data) {
@@ -1488,14 +1487,6 @@ function addAbsence() {
   absences.push(newAbsence);
   if (window._saveAbsence) window._saveAbsence(newAbsence);
 
-  // Notify bot via webhook
-  if (window._BOT_WEBHOOK) {
-    fetch(window._BOT_WEBHOOK + '/notify-absence', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ person, from, to, note: '' })
-    }).catch(e => console.warn('Webhook error:', e));
-  }
   // Push notification to all
   sendPushToAll('assenza', '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
 
