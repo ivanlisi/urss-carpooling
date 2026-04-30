@@ -1249,14 +1249,22 @@ function renderHero() {
   const dateLabel = ` · ${dayNames[d.getDay()]} ${d.getDate()}`;
   const ds = toDateStr(d);
   const driver = getEffectiveDriver(d);
+  const baseDriver = getDriverForDate(d);
+  const isModified = exceptions[ds] && exceptions[ds].driver && exceptions[ds].driver !== baseDriver;
   const col = getUserColor(driver);
   const note = exceptions[ds]?.note || '';
+  const avatarStyle = isModified
+    ? `background: repeating-linear-gradient(45deg, ${col.hex || col.fg}88 0px, ${col.hex || col.fg}88 3px, ${col.hex || col.fg} 3px, ${col.hex || col.fg} 6px)`
+    : `background:${col.hex || col.fg}`;
+  const detailText = isModified
+    ? `<span style="font-style:italic;opacity:0.85">turno modificato</span>`
+    : `Via Tarkowskij · 07:45${note ? ' · ' + note : ''}`;
   hero.innerHTML = `
-    <div class="hero-avatar" style="background:${col.hex || col.fg}">${driver[0]}</div>
+    <div class="hero-avatar" style="${avatarStyle}">${driver[0]}</div>
     <div class="hero-info">
       <div class="hero-label">${label}${dateLabel}</div>
       <div class="hero-name">${driver}</div>
-      <div class="hero-detail">Via Tarkowskij · 07:45${note ? ' · ' + note : ''}</div>
+      <div class="hero-detail">${detailText}</div>
     </div>
     <button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${dayNames[d.getDay()]}', 'placeholder')">modifica</button>
   `;
