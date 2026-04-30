@@ -6,4 +6,4 @@
   node_bundler = "esbuild"
 
 [functions."send-daily-push"]
-  schedule = "45 19 * * 0-6"
+  schedule = "0 19 * * 0-4"
