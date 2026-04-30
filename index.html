@@ -1936,6 +1936,8 @@ function renderProfilePage() {
   const paletteColor = colorId ? getPaletteColor(colorId) : null;
   const bgColor = paletteColor ? paletteColor.hex : '#9B3A3A';
   const colorName = paletteColor ? paletteColor.name : 'Nessun colore';
+  const notifPrefs = profile.notifPrefs || { serale: true };
+  const notifSerale = notifPrefs.serale !== false;
 
   document.getElementById('profileContent').innerHTML = `
     <div class="profile-header-card">
