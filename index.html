@@ -732,6 +732,43 @@ select, input[type="date"] {
   width: 100%; max-width: 280px; cursor: pointer;
 }
 
+/* VEHICLE SECTION */
+.vehicle-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 8px; cursor: pointer;
+}
+.vehicle-card.active-v { border-color: #9B3A3A; box-shadow: 0 0 0 1px #9B3A3A; }
+.vehicle-icon { width: 36px; height: 36px; background: var(--bg); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.vehicle-name { font-size: 14px; font-weight: 500; }
+.vehicle-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.vehicle-check { width: 20px; height: 20px; border-radius: 50%; background: #9B3A3A; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: auto; }
+.vehicle-check-empty { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0; margin-left: auto; }
+.add-vehicle-btn { width: 100%; padding: 11px; background: none; border: 1px dashed var(--border); border-radius: var(--radius); font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-bottom: 12px; }
+
+/* SAVINGS SECTION */
+.savings-hero { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 10px; }
+.savings-amount { font-size: 38px; font-weight: 500; color: #2D6A4F; line-height: 1; }
+.savings-period { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.savings-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 14px 0; }
+.savings-metric { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; }
+.savings-metric-val { font-size: 15px; font-weight: 500; line-height: 1; }
+.savings-metric-label { font-size: 9px; color: var(--muted); margin-top: 3px; }
+.savings-bars { margin-top: 14px; padding-top: 14px; border-top: 0.5px solid var(--border); }
+.savings-bar-header { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 8px; }
+.savings-bar-total { color: #2D6A4F; font-weight: 500; }
+.bars-container { display: flex; align-items: flex-end; gap: 5px; height: 52px; }
+.bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; justify-content: flex-end; }
+.bar-fill { width: 100%; border-radius: 3px 3px 0 0; min-height: 3px; }
+.bar-month { font-size: 8px; color: var(--muted); }
+.group-savings { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+.group-metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.group-metric { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 12px; }
+.group-metric-val { font-size: 18px; font-weight: 500; line-height: 1; }
+.group-metric-label { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.no-vehicle-msg { text-align: center; padding: 24px 16px; color: var(--muted); font-size: 13px; }
+
 /* PROFILE PAGE */
 .profile-page { }
 
@@ -1046,6 +1083,65 @@ select, input[type="date"] {
   </div>
 </div>
 
+<!-- VEHICLE MODAL -->
+<div class="modal-overlay" id="vehicleModal" onclick="if(event.target===this)closeVehicleModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="vehicleModalTitle">Aggiungi veicolo</div>
+    <div style="margin-top:14px">
+      <div class="form-row">
+        <label class="form-label">Marca</label>
+        <select id="vBrand" onchange="onBrandChange()">
+          <option value="">Seleziona marca...</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Modello</label>
+        <select id="vModel" onchange="onModelChange()" disabled>
+          <option value="">Seleziona modello...</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Motore</label>
+        <select id="vEngine" onchange="onEngineChange()" disabled>
+          <option value="">Seleziona motore...</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-row" style="margin-bottom:0">
+          <label class="form-label">Anno</label>
+          <select id="vYear">
+            <option value="">Anno...</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin-bottom:0">
+          <label class="form-label">Cons. reale (L/100km)</label>
+          <input type="number" id="vConsumption" step="0.1" min="1" max="30" placeholder="es. 6.2"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
+        </div>
+      </div>
+      <div id="vFuelInfo" style="display:none;margin-top:8px;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:12px;color:#143325"></div>
+    </div>
+    <div class="form-actions" style="margin-top:16px">
+      <button class="btn-secondary" onclick="closeVehicleModal()">Annulla</button>
+      <button class="btn-primary" onclick="saveVehicle()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE VEHICLE MODAL -->
+<div class="modal-overlay" id="changeVehicleModal" onclick="if(event.target===this)closeChangeVehicleModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Quale auto usi oggi?</div>
+    <div id="changeVehicleList" style="margin-top:14px"></div>
+    <div class="form-actions" style="margin-top:14px">
+      <button class="btn-secondary" onclick="closeChangeVehicleModal()">Annulla</button>
+      <button class="btn-primary" onclick="confirmVehicleChange()">Conferma</button>
+    </div>
+  </div>
+</div>
+
 <!-- SWAP MODAL -->
 <div class="modal-overlay" id="swapModal" onclick="closeModal(event)">
   <div class="modal-sheet">
@@ -1167,6 +1263,75 @@ ANCHOR.setHours(0,0,0,0);
 const ANCHOR_DRIVER_IDX = 0; // Filippo
 
 // Store exceptions & absences in memory (would be localStorage in production)
+
+// ── CAR DATABASE ──────────────────────────────────────────────────────────────
+const CAR_DATABASE = {
+  "Alfa Romeo": { "Giulia": [{ engine: "2.0 Turbo Benzina", fuel: "benzina", wltp: 6.8 },{ engine: "2.2 Diesel", fuel: "diesel", wltp: 5.1 }], "Stelvio": [{ engine: "2.0 Turbo Benzina", fuel: "benzina", wltp: 7.4 },{ engine: "2.2 Diesel", fuel: "diesel", wltp: 5.5 }], "Tonale": [{ engine: "1.5 MHEV Benzina", fuel: "benzina", wltp: 5.9 },{ engine: "1.3 PHEV", fuel: "ibrido_plug", wltp: 1.9 }] },
+  "Dacia": { "Sandero": [{ engine: "1.0 TCe Benzina", fuel: "benzina", wltp: 5.7 },{ engine: "1.0 GPL", fuel: "gpl", wltp: 6.8 }], "Duster": [{ engine: "1.3 Benzina", fuel: "benzina", wltp: 7.2 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 5.5 }] },
+  "Fiat": { "500": [{ engine: "1.0 MHEV Benzina", fuel: "benzina", wltp: 5.5 },{ engine: "500e Elettrico", fuel: "elettrico", wltp: 14.0 }], "500X": [{ engine: "1.0 Benzina", fuel: "benzina", wltp: 6.6 },{ engine: "1.3 Diesel", fuel: "diesel", wltp: 5.2 }], "Panda": [{ engine: "1.0 MHEV Benzina", fuel: "benzina", wltp: 5.2 },{ engine: "1.2 GPL", fuel: "gpl", wltp: 6.5 }], "Tipo": [{ engine: "1.4 Benzina", fuel: "benzina", wltp: 6.4 },{ engine: "1.6 Benzina", fuel: "benzina", wltp: 6.8 },{ engine: "1.6 Diesel", fuel: "diesel", wltp: 4.9 }], "Doblo": [{ engine: "1.4 Benzina", fuel: "benzina", wltp: 7.2 },{ engine: "1.6 Diesel", fuel: "diesel", wltp: 5.8 }] },
+  "Ford": { "Fiesta": [{ engine: "1.0 EcoBoost Benzina", fuel: "benzina", wltp: 5.8 }], "Focus": [{ engine: "1.0 EcoBoost Benzina", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 4.8 }], "Kuga": [{ engine: "2.5 PHEV", fuel: "ibrido_plug", wltp: 1.7 },{ engine: "1.5 Benzina", fuel: "benzina", wltp: 6.9 }], "Puma": [{ engine: "1.0 MHEV Benzina", fuel: "benzina", wltp: 5.5 }] },
+  "Honda": { "Civic": [{ engine: "1.5 Benzina", fuel: "benzina", wltp: 6.2 },{ engine: "e:HEV Ibrido", fuel: "ibrido", wltp: 5.0 }], "HR-V": [{ engine: "e:HEV Ibrido", fuel: "ibrido", wltp: 5.4 }], "Jazz": [{ engine: "e:HEV Ibrido", fuel: "ibrido", wltp: 4.5 }] },
+  "Hyundai": { "Tucson": [{ engine: "1.6 Benzina", fuel: "benzina", wltp: 7.0 },{ engine: "1.6 Diesel", fuel: "diesel", wltp: 5.2 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.6 }], "i10": [{ engine: "1.0 Benzina", fuel: "benzina", wltp: 5.1 }], "i20": [{ engine: "1.0 MHEV Benzina", fuel: "benzina", wltp: 5.5 }], "Kona": [{ engine: "1.0 Benzina", fuel: "benzina", wltp: 6.2 },{ engine: "Electric", fuel: "elettrico", wltp: 14.7 }] },
+  "Jeep": { "Compass": [{ engine: "1.3 Benzina", fuel: "benzina", wltp: 6.4 },{ engine: "1.6 Diesel", fuel: "diesel", wltp: 5.1 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 2.1 }], "Renegade": [{ engine: "1.0 Benzina", fuel: "benzina", wltp: 6.5 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 2.0 }] },
+  "Kia": { "Sportage": [{ engine: "1.6 Benzina", fuel: "benzina", wltp: 7.2 },{ engine: "1.6 Diesel", fuel: "diesel", wltp: 5.4 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.7 }], "Niro": [{ engine: "HEV Ibrido", fuel: "ibrido", wltp: 4.8 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.3 },{ engine: "EV Elettrico", fuel: "elettrico", wltp: 15.0 }] },
+  "Lancia": { "Ypsilon": [{ engine: "1.0 MHEV Benzina", fuel: "benzina", wltp: 5.4 },{ engine: "1.2 GPL", fuel: "gpl", wltp: 6.2 }] },
+  "Mazda": { "CX-5": [{ engine: "2.0 Benzina", fuel: "benzina", wltp: 7.4 },{ engine: "2.2 Diesel", fuel: "diesel", wltp: 5.4 }], "Mazda3": [{ engine: "2.0 Benzina", fuel: "benzina", wltp: 6.5 },{ engine: "e-Skyactiv Ibrido", fuel: "ibrido", wltp: 5.8 }] },
+  "Mercedes": { "Classe A": [{ engine: "A 180 Benzina", fuel: "benzina", wltp: 6.0 },{ engine: "A 180d Diesel", fuel: "diesel", wltp: 4.5 }], "Classe C": [{ engine: "C 200 Benzina", fuel: "benzina", wltp: 6.5 },{ engine: "C 220d Diesel", fuel: "diesel", wltp: 4.9 }], "GLA": [{ engine: "GLA 200 Benzina", fuel: "benzina", wltp: 6.7 },{ engine: "GLA 220d Diesel", fuel: "diesel", wltp: 5.3 }] },
+  "Nissan": { "Juke": [{ engine: "1.0 Benzina", fuel: "benzina", wltp: 6.2 },{ engine: "HEV Ibrido", fuel: "ibrido", wltp: 5.5 }], "Qashqai": [{ engine: "1.3 MHEV Benzina", fuel: "benzina", wltp: 6.8 },{ engine: "e-Power Ibrido", fuel: "ibrido", wltp: 5.3 }], "Leaf": [{ engine: "Electric", fuel: "elettrico", wltp: 15.0 }] },
+  "Opel": { "Astra": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 4.7 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.5 }], "Corsa": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 5.6 },{ engine: "Corsa-e Elettrico", fuel: "elettrico", wltp: 14.9 }], "Mokka": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 6.3 },{ engine: "Mokka-e Elettrico", fuel: "elettrico", wltp: 15.0 }] },
+  "Peugeot": { "208": [{ engine: "1.2 Benzina 100cv", fuel: "benzina", wltp: 5.5 },{ engine: "e-208 Elettrico", fuel: "elettrico", wltp: 14.9 }], "2008": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 4.8 },{ engine: "e-2008 Elettrico", fuel: "elettrico", wltp: 15.8 }], "3008": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 6.4 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 5.0 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.6 }] },
+  "Renault": { "Clio": [{ engine: "1.0 TCe Benzina", fuel: "benzina", wltp: 5.7 },{ engine: "E-Tech Ibrido", fuel: "ibrido", wltp: 4.6 }], "Captur": [{ engine: "1.0 TCe Benzina", fuel: "benzina", wltp: 6.0 },{ engine: "E-Tech Ibrido", fuel: "ibrido", wltp: 4.8 },{ engine: "E-Tech PHEV", fuel: "ibrido_plug", wltp: 1.5 }], "Megane": [{ engine: "1.3 Benzina", fuel: "benzina", wltp: 6.3 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 4.7 }], "Zoe": [{ engine: "Elettrico", fuel: "elettrico", wltp: 17.2 }] },
+  "Seat": { "Ibiza": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 5.6 }], "Leon": [{ engine: "1.5 TSI Benzina", fuel: "benzina", wltp: 6.0 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 4.6 }], "Ateca": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 6.4 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 5.2 }] },
+  "Skoda": { "Fabia": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 5.6 }], "Octavia": [{ engine: "1.5 TSI Benzina", fuel: "benzina", wltp: 6.0 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 4.6 }], "Kamiq": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 6.0 }] },
+  "Tesla": { "Model 3": [{ engine: "Standard Range Elettrico", fuel: "elettrico", wltp: 14.3 },{ engine: "Long Range Elettrico", fuel: "elettrico", wltp: 15.0 }], "Model Y": [{ engine: "Standard Range Elettrico", fuel: "elettrico", wltp: 15.7 }] },
+  "Toyota": { "Yaris": [{ engine: "1.5 Hybrid", fuel: "ibrido", wltp: 3.8 },{ engine: "1.0 Benzina", fuel: "benzina", wltp: 5.5 }], "Yaris Cross": [{ engine: "1.5 Hybrid", fuel: "ibrido", wltp: 4.7 }], "Corolla": [{ engine: "1.8 Hybrid", fuel: "ibrido", wltp: 4.5 },{ engine: "2.0 Hybrid", fuel: "ibrido", wltp: 4.8 }], "RAV4": [{ engine: "2.5 Hybrid", fuel: "ibrido", wltp: 5.8 },{ engine: "2.5 PHEV", fuel: "ibrido_plug", wltp: 1.1 }], "C-HR": [{ engine: "1.8 Hybrid", fuel: "ibrido", wltp: 4.9 }] },
+  "Volkswagen": { "Golf": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 5.5 },{ engine: "1.5 TSI Benzina", fuel: "benzina", wltp: 5.9 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 4.5 },{ engine: "eHybrid PHEV", fuel: "ibrido_plug", wltp: 1.4 }], "Polo": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 5.5 }], "T-Cross": [{ engine: "1.0 TSI Benzina", fuel: "benzina", wltp: 5.8 }], "T-Roc": [{ engine: "1.5 TSI Benzina", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 5.2 }], "Tiguan": [{ engine: "1.5 TSI Benzina", fuel: "benzina", wltp: 7.0 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 5.5 },{ engine: "eHybrid PHEV", fuel: "ibrido_plug", wltp: 1.8 }], "ID.3": [{ engine: "Elettrico 204cv", fuel: "elettrico", wltp: 15.4 }], "ID.4": [{ engine: "Elettrico 204cv", fuel: "elettrico", wltp: 16.5 }] },
+  "Volvo": { "XC40": [{ engine: "B3 Benzina", fuel: "benzina", wltp: 6.6 },{ engine: "B4 Diesel", fuel: "diesel", wltp: 5.3 },{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.8 },{ engine: "Elettrico", fuel: "elettrico", wltp: 18.1 }] },
+  "Audi": { "A3": [{ engine: "1.5 TFSI Benzina", fuel: "benzina", wltp: 5.8 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 4.3 }], "A4": [{ engine: "2.0 TFSI Benzina", fuel: "benzina", wltp: 6.4 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 4.7 }], "Q3": [{ engine: "1.5 TFSI Benzina", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel", fuel: "diesel", wltp: 5.2 }] },
+  "BMW": { "Serie 1": [{ engine: "118i Benzina", fuel: "benzina", wltp: 6.1 },{ engine: "118d Diesel", fuel: "diesel", wltp: 4.5 }], "Serie 3": [{ engine: "320i Benzina", fuel: "benzina", wltp: 6.5 },{ engine: "320d Diesel", fuel: "diesel", wltp: 4.9 }], "X1": [{ engine: "sDrive18d Diesel", fuel: "diesel", wltp: 5.1 },{ engine: "xDrive25e PHEV", fuel: "ibrido_plug", wltp: 1.6 }] },
+  "Citroën": { "C3": [{ engine: "1.2 PureTech Benzina", fuel: "benzina", wltp: 5.5 }], "C4": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 6.0 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 4.7 },{ engine: "ë-C4 Elettrico", fuel: "elettrico", wltp: 16.4 }], "C5 Aircross": [{ engine: "1.2 Benzina", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 Diesel", fuel: "diesel", wltp: 5.0 }] },
+  "Mitsubishi": { "Eclipse Cross": [{ engine: "PHEV", fuel: "ibrido_plug", wltp: 1.9 }], "Outlander": [{ engine: "PHEV", fuel: "ibrido_plug", wltp: 2.0 }] }
+};
+
+const REAL_WORLD_COEFF = { benzina: 1.18, diesel: 1.15, gpl: 1.20, ibrido: 1.10, ibrido_plug: 1.35, elettrico: 1.12 };
+const CO2_FACTOR = { benzina: 2.31, diesel: 2.68, gpl: 1.65, ibrido: 2.31, ibrido_plug: 2.31, elettrico: 0.233 };
+
+const FUEL_UNIT = { benzina: 'L', diesel: 'L', gpl: 'L', ibrido: 'L', ibrido_plug: 'L', elettrico: 'kWh' };
+const FUEL_LABEL = { benzina: 'Benzina', diesel: 'Diesel', gpl: 'GPL', ibrido: 'Ibrido', ibrido_plug: 'Plug-in Hybrid', elettrico: 'Elettrico' };
+
+const ROUND_TRIP_KM = 49.8; // 24.9 km × 2
+
+// Default fuel prices fallback
+let fuelPrices = { benzina: 1.812, diesel: 1.689, gpl: 0.721, ibrido: 1.812, ibrido_plug: 1.812, elettrico: 0.25 };
+
+async function loadFuelPrices() {
+  try {
+    const res = await fetch('/.netlify/functions/fuel-prices');
+    if (res.ok) fuelPrices = await res.json();
+  } catch(e) { console.warn('Fuel prices fallback'); }
+}
+
+function calcSavings(vehicle, kmSaved) {
+  if (!vehicle || !kmSaved) return { cost: 0, fuel: 0, co2: 0 };
+  const realConsumption = vehicle.wltp * (REAL_WORLD_COEFF[vehicle.fuel] || 1.18);
+  const fuelUsed = (kmSaved / 100) * realConsumption;
+  const price = fuelPrices[vehicle.fuel] || 1.812;
+  const cost = fuelUsed * price;
+  const co2 = fuelUsed * (CO2_FACTOR[vehicle.fuel] || 2.31);
+  return {
+    cost: Math.round(cost * 10) / 10,
+    fuel: Math.round(fuelUsed * 10) / 10,
+    co2: Math.round(co2 * 10) / 10,
+    unit: FUEL_UNIT[vehicle.fuel] || 'L'
+  };
+}
+
+function getActiveVehicle(profile) {
+  const vehicles = profile?.vehicles || [];
+  if (!vehicles.length) return null;
+  return vehicles.find(v => v.active) || vehicles[0];
+}
+
 window.exceptions = window.exceptions || {};
 let exceptions = window.exceptions; // dateStr -> { note, driver }
 window.userProfiles = {}; // userId -> { color, pin, name }
@@ -1662,6 +1827,193 @@ async function confirmReset() {
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
+// ── VEHICLES ─────────────────────────────────────────────────────────────────
+function renderVehicleCards(profile) {
+  const vehicles = profile?.vehicles || [];
+  if (!vehicles.length) return '<div class="no-vehicle-msg">Nessun veicolo aggiunto</div>';
+  return vehicles.map((v, i) => `
+    <div class="vehicle-card ${v.active ? 'active-v' : ''}" onclick="setActiveVehicle(${i})">
+      <div class="vehicle-icon">
+        <svg width="22" height="14" viewBox="0 0 40 24" fill="none">
+          <path d="M8 16H4a2 2 0 01-2-2v-2l4-6h24l4 6v2a2 2 0 01-2 2h-4" stroke="${v.active ? '#9B3A3A' : '#7A7870'}" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="10" cy="18" r="3" stroke="${v.active ? '#9B3A3A' : '#7A7870'}" stroke-width="2"/>
+          <circle cx="30" cy="18" r="3" stroke="${v.active ? '#9B3A3A' : '#7A7870'}" stroke-width="2"/>
+        </svg>
+      </div>
+      <div style="flex:1">
+        <div class="vehicle-name">${v.brand} ${v.model}</div>
+        <div class="vehicle-sub">${v.engine} · ${v.year} · ${(v.consumption || v.wltp).toFixed(1)} L/100km</div>
+      </div>
+      ${v.active
+        ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+             <span style="font-size:10px;background:#D8EEE4;color:#143325;padding:2px 7px;border-radius:8px;font-weight:500">attivo</span>
+             <div class="vehicle-check"><svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+           </div>`
+        : `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+             <span style="font-size:10px;color:var(--warn);cursor:pointer" onclick="event.stopPropagation();removeVehicle(${i})">rimuovi</span>
+             <div class="vehicle-check-empty"></div>
+           </div>`
+      }
+    </div>`).join('');
+}
+
+async function setActiveVehicle(idx) {
+  if (!currentUser) return;
+  const profile = window.userProfiles[currentUser] || {};
+  const vehicles = (profile.vehicles || []).map((v, i) => ({ ...v, active: i === idx }));
+  window.userProfiles[currentUser] = { ...profile, vehicles };
+  await window._saveProfile(currentUser, { vehicles });
+  renderProfilePage();
+}
+
+async function removeVehicle(idx) {
+  if (!currentUser) return;
+  const profile = window.userProfiles[currentUser] || {};
+  const vehicles = (profile.vehicles || []).filter((_, i) => i !== idx);
+  if (vehicles.length > 0 && !vehicles.find(v => v.active)) vehicles[0].active = true;
+  window.userProfiles[currentUser] = { ...profile, vehicles };
+  await window._saveProfile(currentUser, { vehicles });
+  renderProfilePage();
+}
+
+function openVehicleModal() {
+  // Populate brands
+  const brandSel = document.getElementById('vBrand');
+  brandSel.innerHTML = '<option value="">Seleziona marca...</option>';
+  Object.keys(CAR_DATABASE).sort().forEach(b => {
+    brandSel.innerHTML += `<option value="${b}">${b}</option>`;
+  });
+  document.getElementById('vModel').innerHTML = '<option value="">Seleziona modello...</option>';
+  document.getElementById('vModel').disabled = true;
+  document.getElementById('vEngine').innerHTML = '<option value="">Seleziona motore...</option>';
+  document.getElementById('vEngine').disabled = true;
+  document.getElementById('vConsumption').value = '';
+  document.getElementById('vFuelInfo').style.display = 'none';
+  // Populate years
+  const yearSel = document.getElementById('vYear');
+  yearSel.innerHTML = '<option value="">Anno...</option>';
+  const yr = new Date().getFullYear();
+  for (let y = yr; y >= 2005; y--) yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+  document.getElementById('vehicleModal').classList.add('open');
+}
+
+function onBrandChange() {
+  const brand = document.getElementById('vBrand').value;
+  const modelSel = document.getElementById('vModel');
+  modelSel.innerHTML = '<option value="">Seleziona modello...</option>';
+  modelSel.disabled = !brand;
+  if (brand && CAR_DATABASE[brand]) {
+    Object.keys(CAR_DATABASE[brand]).sort().forEach(m => {
+      modelSel.innerHTML += `<option value="${m}">${m}</option>`;
+    });
+  }
+  document.getElementById('vEngine').innerHTML = '<option value="">Seleziona motore...</option>';
+  document.getElementById('vEngine').disabled = true;
+  document.getElementById('vConsumption').value = '';
+  document.getElementById('vFuelInfo').style.display = 'none';
+}
+
+function onModelChange() {
+  const brand = document.getElementById('vBrand').value;
+  const model = document.getElementById('vModel').value;
+  const engineSel = document.getElementById('vEngine');
+  engineSel.innerHTML = '<option value="">Seleziona motore...</option>';
+  engineSel.disabled = !model;
+  if (brand && model && CAR_DATABASE[brand]?.[model]) {
+    CAR_DATABASE[brand][model].forEach((e, i) => {
+      engineSel.innerHTML += `<option value="${i}">${e.engine}</option>`;
+    });
+  }
+  document.getElementById('vConsumption').value = '';
+  document.getElementById('vFuelInfo').style.display = 'none';
+}
+
+function onEngineChange() {
+  const brand = document.getElementById('vBrand').value;
+  const model = document.getElementById('vModel').value;
+  const idx = parseInt(document.getElementById('vEngine').value);
+  if (!isNaN(idx) && CAR_DATABASE[brand]?.[model]?.[idx]) {
+    const e = CAR_DATABASE[brand][model][idx];
+    const realConsumption = (e.wltp * (REAL_WORLD_COEFF[e.fuel] || 1.18)).toFixed(1);
+    document.getElementById('vConsumption').value = realConsumption;
+    const info = document.getElementById('vFuelInfo');
+    info.style.display = 'block';
+    info.textContent = `${FUEL_LABEL[e.fuel]} · WLTP: ${e.wltp} L/100km · Stimato reale: ${realConsumption} L/100km`;
+  }
+}
+
+function closeVehicleModal() {
+  document.getElementById('vehicleModal').classList.remove('open');
+}
+
+async function saveVehicle() {
+  const brand = document.getElementById('vBrand').value;
+  const model = document.getElementById('vModel').value;
+  const engineIdx = parseInt(document.getElementById('vEngine').value);
+  const year = document.getElementById('vYear').value;
+  const consumption = parseFloat(document.getElementById('vConsumption').value);
+  if (!brand || !model || isNaN(engineIdx) || !year || isNaN(consumption)) {
+    alert('Compila tutti i campi');
+    return;
+  }
+  const engineData = CAR_DATABASE[brand][model][engineIdx];
+  const profile = window.userProfiles[currentUser] || {};
+  const vehicles = profile.vehicles || [];
+  const newVehicle = {
+    brand, model,
+    engine: engineData.engine,
+    fuel: engineData.fuel,
+    wltp: engineData.wltp,
+    consumption,
+    year: parseInt(year),
+    active: vehicles.length === 0
+  };
+  vehicles.push(newVehicle);
+  window.userProfiles[currentUser] = { ...profile, vehicles };
+  await window._saveProfile(currentUser, { vehicles });
+  closeVehicleModal();
+  renderProfilePage();
+}
+
+// Quick vehicle change
+let tempSelectedVehicle = null;
+function openChangeVehicleModal() {
+  const profile = window.userProfiles[currentUser] || {};
+  const vehicles = profile.vehicles || [];
+  if (vehicles.length <= 1) return;
+  tempSelectedVehicle = vehicles.findIndex(v => v.active);
+  const list = document.getElementById('changeVehicleList');
+  list.innerHTML = vehicles.map((v, i) => `
+    <div class="vehicle-card ${v.active ? 'active-v' : ''}" onclick="selectTempVehicle(${i})" id="cvCard_${i}">
+      <div style="flex:1">
+        <div class="vehicle-name">${v.brand} ${v.model}</div>
+        <div class="vehicle-sub">${v.engine} · ${v.year}</div>
+      </div>
+      ${v.active
+        ? `<div class="vehicle-check"><svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>`
+        : `<div class="vehicle-check-empty" id="cvCheck_${i}"></div>`}
+    </div>`).join('');
+  document.getElementById('changeVehicleModal').classList.add('open');
+}
+
+function selectTempVehicle(idx) {
+  tempSelectedVehicle = idx;
+  document.querySelectorAll('[id^="cvCard_"]').forEach((el, i) => {
+    el.classList.toggle('active-v', i === idx);
+  });
+}
+
+function closeChangeVehicleModal() {
+  document.getElementById('changeVehicleModal').classList.remove('open');
+}
+
+async function confirmVehicleChange() {
+  if (tempSelectedVehicle === null) { closeChangeVehicleModal(); return; }
+  await setActiveVehicle(tempSelectedVehicle);
+  closeChangeVehicleModal();
+  renderStats();
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let pinBuffer = '';
 let pinMode = 'login'; // 'login' | 'set' | 'confirm'
@@ -1939,6 +2291,9 @@ function renderProfilePage() {
   const notifPrefs = profile.notifPrefs || { serale: true };
   const notifSerale = notifPrefs.serale !== false;
 
+  // Load fuel prices in background
+  loadFuelPrices();
+
   document.getElementById('profileContent').innerHTML = `
     <div class="profile-header-card">
       <div class="profile-av-lg" style="background:${bgColor}">${currentUser[0]}</div>
@@ -2026,6 +2381,7 @@ async function init() {
   if (window._loadExceptions) window._loadExceptions();
   if (window._loadAbsences) window._loadAbsences();
   // Initial render with any cached data
+  loadFuelPrices();
   renderHero();
   renderTurnList();
   renderCalendar();
