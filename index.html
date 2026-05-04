@@ -963,8 +963,11 @@ select, input[type="date"] {
 
   <!-- STATISTICHE PAGE -->
   <div id="page-statistiche" class="page" style="padding-bottom:80px">
+    <div class="content">
+    <div id="savingsSection"></div>
     <div class="section-label">Turni effettuati</div>
     <div class="stats-grid" id="statsGrid"></div>
+    </div>
 
   </div>
 
@@ -1558,6 +1561,112 @@ function changeMonth(dir) {
 let turniCompletati = {};
 let resetDate = '2026-04-27';
 
+function renderSavingsSection() {
+  const savingsEl = document.getElementById('savingsSection');
+  if (!savingsEl) return;
+  if (!currentUser) { savingsEl.innerHTML = ''; return; }
+
+  const profile = window.userProfiles[currentUser] || {};
+  const vehicle = getActiveVehicle(profile);
+
+  if (!vehicle) {
+    savingsEl.innerHTML = `
+      <div class="section-label">Il tuo risparmio</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 16px;text-align:center;margin-bottom:12px">
+        <div style="font-size:28px;margin-bottom:8px">&#128663;</div>
+        <div style="font-size:13px;color:var(--muted)">Aggiungi il tuo veicolo nelle impostazioni per vedere il risparmio stimato</div>
+      </div>`;
+    return;
+  }
+
+  const ROUND_TRIP_KM = 49.8;
+  const myAbsences = absences.filter(a => a.person === currentUser);
+  function isAbsentDay(ds) { return myAbsences.some(a => a.from <= ds && a.to >= ds); }
+
+  const now = new Date();
+  const months = {};
+  let totalKmSaved = 0;
+
+  Object.entries(turniCompletati).forEach(([ds, driver]) => {
+    if (ds < resetDate) return;
+    if (driver === currentUser) return;
+    if (isAbsentDay(ds)) return;
+    totalKmSaved += ROUND_TRIP_KM;
+    const month = ds.slice(0, 7);
+    months[month] = (months[month] || 0) + ROUND_TRIP_KM;
+  });
+
+  const savings = calcSavings(vehicle, totalKmSaved);
+  const currentMonthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const currentMonthKm = months[currentMonthKey] || 0;
+  const currentMonthSav = calcSavings(vehicle, currentMonthKm);
+
+  const MONTH_NAMES = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const monthLabels = [];
+  for (let i = 3; i >= 0; i--) {
+    const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = m.getFullYear() + '-' + String(m.getMonth()+1).padStart(2,'0');
+    const mKm = months[key] || 0;
+    monthLabels.push({ label: MONTH_NAMES[m.getMonth()], cost: calcSavings(vehicle, mKm).cost });
+  }
+  const maxBar = Math.max(...monthLabels.map(m => m.cost), 1);
+
+  let groupKmSaved = 0;
+  DRIVERS.forEach(name => {
+    const prof = window.userProfiles[name] || {};
+    const veh = getActiveVehicle(prof);
+    if (!veh) return;
+    const nameAbsences = absences.filter(a => a.person === name);
+    Object.entries(turniCompletati).forEach(([ds, driver]) => {
+      if (ds < resetDate || driver === name) return;
+      if (nameAbsences.some(a => a.from <= ds && a.to >= ds)) return;
+      groupKmSaved += ROUND_TRIP_KM;
+    });
+  });
+  const groupCost = Math.round(groupKmSaved * 0.097);
+  const groupCo2 = Math.round(groupKmSaved * 0.025 * 2.31);
+
+  const barsHtml = monthLabels.map((m, i) =>
+    '<div class="bar-wrap"><div class="bar-fill" style="height:' + Math.max(4, Math.round((m.cost/maxBar)*48)) + 'px;background:' + (i===3?'#2D6A4F':'#B8E0CC') + '"></div><div class="bar-month">' + m.label + '</div></div>'
+  ).join('');
+
+  const col = getUserColor(currentUser);
+  const vehicles = profile.vehicles || [];
+
+  savingsEl.innerHTML =
+    '<div class="section-label">Il tuo risparmio</div>' +
+    '<div class="savings-hero">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<div class="turn-avatar" style="background:' + col.bg + ';color:' + col.fg + ';width:36px;height:36px">' + currentUser[0] + '</div>' +
+          '<div><div style="font-size:13px;font-weight:500">' + currentUser + '</div>' +
+          '<div style="font-size:11px;color:var(--muted)">' + vehicle.brand + ' ' + vehicle.model + ' · ' + vehicle.engine + '</div></div>' +
+        '</div>' +
+        (vehicles.length > 1 ? '<button onclick="openChangeVehicleModal()" style="font-size:11px;color:#9B3A3A;border:0.5px solid #9B3A3A;background:none;border-radius:20px;padding:4px 10px;cursor:pointer">cambia auto</button>' : '') +
+      '</div>' +
+      '<div style="text-align:center;padding:8px 0 14px;border-bottom:0.5px solid var(--border);margin-bottom:14px">' +
+        '<div class="savings-amount">&#8364; ' + currentMonthSav.cost.toFixed(0) + '</div>' +
+        '<div class="savings-period">risparmiati questo mese</div>' +
+      '</div>' +
+      '<div class="savings-metrics">' +
+        '<div class="savings-metric"><div class="savings-metric-val">' + Math.round(currentMonthKm) + '</div><div class="savings-metric-label">km non percorsi</div></div>' +
+        '<div class="savings-metric"><div class="savings-metric-val">' + currentMonthSav.fuel + ' ' + currentMonthSav.unit + '</div><div class="savings-metric-label">carburante</div></div>' +
+        '<div class="savings-metric"><div class="savings-metric-val" style="font-size:12px;color:#2D6A4F">' + currentMonthSav.co2 + ' kg</div><div class="savings-metric-label">CO2</div></div>' +
+      '</div>' +
+      '<div class="savings-bars">' +
+        '<div class="savings-bar-header"><span>ultimi 4 mesi</span><span class="savings-bar-total">&#8364; ' + savings.cost.toFixed(0) + ' totale</span></div>' +
+        '<div class="bars-container">' + barsHtml + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="section-label">Il gruppo URSS</div>' +
+    '<div class="group-savings"><div class="group-metrics-grid">' +
+      '<div class="group-metric"><div class="group-metric-val">&#8364; ' + groupCost + '</div><div class="group-metric-label">risparmiati insieme</div></div>' +
+      '<div class="group-metric"><div class="group-metric-val">' + groupCo2 + ' kg</div><div class="group-metric-label">CO2 non emessi</div></div>' +
+      '<div class="group-metric"><div class="group-metric-val">' + Math.round(groupKmSaved) + '</div><div class="group-metric-label">km non percorsi</div></div>' +
+      '<div class="group-metric"><div class="group-metric-val">' + DRIVERS.length + '</div><div class="group-metric-label">compagni attivi</div></div>' +
+    '</div></div>';
+}
+
 function renderStats() {
   const counts = { Ivan:0, Ilaria:0, Dervis:0, Filippo:0 };
   Object.entries(turniCompletati).forEach(([ds, driver]) => {
@@ -1579,6 +1688,7 @@ function renderStats() {
       </div>`;
   });
   document.getElementById('statsGrid').innerHTML = html;
+  renderSavingsSection();
 }
 
 async function loadTurniCompletati() {
@@ -2331,6 +2441,9 @@ function renderProfilePage() {
         </label>
       </div>
     </div>
+    <div class="section-label" style="margin-bottom:8px">I miei veicoli</div>
+    ${renderVehicleCards(profile)}
+    <button class="add-vehicle-btn" onclick="openVehicleModal()">+ aggiungi veicolo</button>
     <div class="profile-section">
       <div class="profile-row" onclick="logout()" style="cursor:pointer">
         <div class="profile-label" style="color:#dd785b">Logout</div>
