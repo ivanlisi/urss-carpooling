@@ -1172,7 +1172,7 @@ select, input[type="date"] {
     </div>
     <div class="form-actions" style="margin-top:16px">
       <button class="btn-secondary" onclick="closeVehicleModal()">Annulla</button>
-      <button class="btn-primary" onclick="saveVehicle()">Salva</button>
+      <button class="btn-primary" id="vehicleSaveBtn" onclick="saveVehicle()">Salva</button>
     </div>
   </div>
 </div>
@@ -1587,7 +1587,8 @@ function calcSavings(vehicle, kmSaved) {
     cost: Math.round(cost * 10) / 10,
     fuel: Math.round(fuelUsed * 10) / 10,
     co2: Math.round(co2 * 10) / 10,
-    unit: FUEL_UNIT[vehicle.fuel] || 'L'
+    unit: FUEL_UNIT[vehicle.fuel] || 'L',
+    fuel: vehicle.fuel || 'benzina'
   };
 }
 
@@ -2391,8 +2392,11 @@ async function loadPresences() {
 function renderVehicleCards(profile) {
   const vehicles = profile?.vehicles || [];
   if (!vehicles.length) return '<div class="no-vehicle-msg">Nessun veicolo aggiunto</div>';
+  const editIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A7870" stroke-width="1.8" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  const trashIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dd785b" stroke-width="1.8" stroke-linecap="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>';
+  const checkIcon = '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>';
   return vehicles.map((v, i) => `
-    <div class="vehicle-card ${v.active ? 'active-v' : ''}" onclick="setActiveVehicle(${i})">
+    <div class="vehicle-card ${v.active ? 'active-v' : ''}">
       <div class="vehicle-icon">
         <svg width="22" height="14" viewBox="0 0 40 24" fill="none">
           <path d="M8 16H4a2 2 0 01-2-2v-2l4-6h24l4 6v2a2 2 0 01-2 2h-4" stroke="${v.active ? '#9B3A3A' : '#7A7870'}" stroke-width="2" stroke-linecap="round"/>
@@ -2401,19 +2405,19 @@ function renderVehicleCards(profile) {
         </svg>
       </div>
       <div style="flex:1">
-        <div class="vehicle-name">${v.brand} ${v.model}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="vehicle-name">${v.brand} ${v.model}</div>
+          ${v.active ? '<span style="font-size:10px;background:#D8EEE4;color:#143325;padding:2px 7px;border-radius:8px;font-weight:500">attivo</span>' : ''}
+        </div>
         <div class="vehicle-sub">${v.engine} · ${v.year} · ${(v.consumption || v.wltp).toFixed(1)} L/100km</div>
       </div>
-      ${v.active
-        ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-             <span style="font-size:10px;background:#D8EEE4;color:#143325;padding:2px 7px;border-radius:8px;font-weight:500">attivo</span>
-             <div class="vehicle-check"><svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-           </div>`
-        : `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-             <span style="font-size:10px;color:var(--warn);cursor:pointer" onclick="event.stopPropagation();removeVehicle(${i})">rimuovi</span>
-             <div class="vehicle-check-empty"></div>
-           </div>`
-      }
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <button onclick="editVehicle(${i})" style="width:30px;height:30px;border-radius:8px;background:#F2F0EB;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer">${editIcon}</button>
+        <button onclick="removeVehicle(${i})" style="width:30px;height:30px;border-radius:8px;background:#FEF0EE;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer">${trashIcon}</button>
+        <div onclick="setActiveVehicle(${i})" style="width:22px;height:22px;border-radius:50%;border:1.5px solid ${v.active ? '#9B3A3A' : 'var(--border)'};background:${v.active ? '#9B3A3A' : 'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+          ${v.active ? checkIcon : ''}
+        </div>
+      </div>
     </div>`).join('');
 }
 
@@ -2428,6 +2432,7 @@ async function setActiveVehicle(idx) {
 
 async function removeVehicle(idx) {
   if (!currentUser) return;
+  if (!confirm('Rimuovere questo veicolo?')) return;
   const profile = window.userProfiles[currentUser] || {};
   const vehicles = (profile.vehicles || []).filter((_, i) => i !== idx);
   if (vehicles.length > 0 && !vehicles.find(v => v.active)) vehicles[0].active = true;
@@ -2436,25 +2441,52 @@ async function removeVehicle(idx) {
   renderProfilePage();
 }
 
-function openVehicleModal() {
-  // Populate brands
+let editingVehicleIdx = null;
+
+function openVehicleModal(editIdx) {
+  editingVehicleIdx = editIdx !== undefined ? editIdx : null;
+  const isEdit = editingVehicleIdx !== null;
+  document.getElementById('vehicleModalTitle').textContent = isEdit ? 'Modifica veicolo' : 'Aggiungi veicolo';
+  document.getElementById('vehicleSaveBtn').textContent = isEdit ? 'Salva modifiche' : 'Salva';
+
   const brandSel = document.getElementById('vBrand');
   brandSel.innerHTML = '<option value="">Seleziona marca...</option>';
   Object.keys(CAR_DATABASE).sort().forEach(b => {
     brandSel.innerHTML += `<option value="${b}">${b}</option>`;
   });
-  document.getElementById('vModel').innerHTML = '<option value="">Seleziona modello...</option>';
-  document.getElementById('vModel').disabled = true;
-  document.getElementById('vEngine').innerHTML = '<option value="">Seleziona motore...</option>';
-  document.getElementById('vEngine').disabled = true;
-  document.getElementById('vConsumption').value = '';
-  document.getElementById('vFuelInfo').style.display = 'none';
-  // Populate years
   const yearSel = document.getElementById('vYear');
   yearSel.innerHTML = '<option value="">Anno...</option>';
   const yr = new Date().getFullYear();
   for (let y = yr; y >= 2005; y--) yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+
+  if (isEdit) {
+    const profile = window.userProfiles[currentUser] || {};
+    const v = (profile.vehicles || [])[editingVehicleIdx];
+    if (v) {
+      brandSel.value = v.brand;
+      onBrandChange();
+      document.getElementById('vModel').value = v.model;
+      onModelChange();
+      // Find engine index
+      const engines = CAR_DATABASE[v.brand]?.[v.model] || [];
+      const eIdx = engines.findIndex(e => e.engine === v.engine);
+      if (eIdx >= 0) document.getElementById('vEngine').value = eIdx;
+      document.getElementById('vYear').value = v.year;
+      document.getElementById('vConsumption').value = v.consumption || v.wltp;
+    }
+  } else {
+    document.getElementById('vModel').innerHTML = '<option value="">Seleziona modello...</option>';
+    document.getElementById('vModel').disabled = true;
+    document.getElementById('vEngine').innerHTML = '<option value="">Seleziona motore...</option>';
+    document.getElementById('vEngine').disabled = true;
+    document.getElementById('vConsumption').value = '';
+    document.getElementById('vFuelInfo').style.display = 'none';
+  }
   document.getElementById('vehicleModal').classList.add('open');
+}
+
+function editVehicle(idx) {
+  openVehicleModal(idx);
 }
 
 function onBrandChange() {
@@ -2518,21 +2550,29 @@ async function saveVehicle() {
   }
   const engineData = CAR_DATABASE[brand][model][engineIdx];
   const profile = window.userProfiles[currentUser] || {};
-  const vehicles = profile.vehicles || [];
-  const newVehicle = {
+  const vehicles = [...(profile.vehicles || [])];
+  const vehicleData = {
     brand, model,
     engine: engineData.engine,
     fuel: engineData.fuel,
     wltp: engineData.wltp,
     consumption,
     year: parseInt(year),
-    active: vehicles.length === 0
   };
-  vehicles.push(newVehicle);
+  if (editingVehicleIdx !== null) {
+    // Edit mode — preserve active state
+    vehicleData.active = vehicles[editingVehicleIdx]?.active || false;
+    vehicles[editingVehicleIdx] = vehicleData;
+  } else {
+    // Add mode
+    vehicleData.active = vehicles.length === 0;
+    vehicles.push(vehicleData);
+  }
   window.userProfiles[currentUser] = { ...profile, vehicles };
   await window._saveProfile(currentUser, { vehicles });
   closeVehicleModal();
   renderProfilePage();
+  renderSavingsSection();
 }
 
 // Quick vehicle change
