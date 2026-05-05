@@ -802,6 +802,18 @@ select, input[type="date"] {
 .pdrop-opt:last-child { border-bottom:none; }
 .pdrop-opt.active { font-weight:500; }
 .turn-card.incomplete { border-color:#ea994d; }
+/* SPLASH OVERLAY */
+#splashOverlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 0.25s ease;
+}
+#splashOverlay.hidden { opacity: 0; pointer-events: none; }
+.splash-title { font-family: "DM Mono", monospace; font-size: 36px; font-weight: 500; color: white; letter-spacing: -1px; }
+.splash-sub { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 6px; }
+
 /* TOGGLE */
 .toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
@@ -919,6 +931,8 @@ select, input[type="date"] {
 </style>
 </head>
 <body>
+
+<div id="splashOverlay"><div class="splash-title">URSS</div><div class="splash-sub">Carpooling · Viserba → Cesena</div></div>
 
 <div class="app-header">
   <div class="header-top">
@@ -2618,6 +2632,8 @@ let pinSetFirst = '';
 let pendingUser = null;
 
 function showWhoScreen() {
+  const splash = document.getElementById('splashOverlay');
+  if (splash) { splash.classList.add('hidden'); setTimeout(() => splash.remove(), 300); }
   document.getElementById('whoScreen').style.display = 'flex';
   document.getElementById('pinScreen').style.display = 'none';
   renderMemberGrid();
@@ -2731,6 +2747,9 @@ async function loginUser(name) {
   updateTabLabel();
   renderHero();
   renderTurnList();
+  // Hide splash overlay
+  const splash = document.getElementById('splashOverlay');
+  if (splash) { splash.classList.add('hidden'); setTimeout(() => splash.remove(), 300); }
   // Register push notifications
   setTimeout(registerPush, 1000);
 }
