@@ -2277,12 +2277,12 @@ function renderPresenceModal(ds) {
       html += '<div class="presence-av" style="background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
       html += '<div class="presence-name">' + name + ' <span style="font-size:10px;color:var(--muted)">(tu)</span></div>';
       html += '</div><div style="position:relative">';
-      html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown('' + ds + '')">' + badgeTxt + '</div>';
+      html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown(&quot;' + ds + '&quot;)">' + badgeTxt + '</div>';
       html += '<div class="presence-dropdown" id="presenceDrop_' + ds + '" style="display:none">';
       const activeYes = !absent ? 'active' : '';
       const activeNo = absent ? 'active' : '';
-      html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="togglePresence('' + ds + '', true)">Ci sono</div>';
-      html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence('' + ds + '', false)">Non ci sono</div>';
+      html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="togglePresence(&quot;' + ds + '&quot;, true)">Ci sono</div>';
+      html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence(&quot;' + ds + '&quot;, false)">Non ci sono</div>';
       html += '</div></div></div>';
     } else {
       const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
