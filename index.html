@@ -818,11 +818,12 @@ select, input[type="date"] {
 .notif-bell-btn { position:relative; }
 .notif-badge { position:absolute; top:-3px; right:-3px; width:16px; height:16px; background:#ea994d; border-radius:50%; border:1.5px solid #9B3A3A; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; display:none; }
 .notif-badge.visible { display:flex; }
-.notif-overlay { position:fixed; inset:0; z-index:200; background:transparent; display:none; }
+.notif-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.4); display:none; }
 .notif-overlay.open { display:block; }
-.notif-panel { position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 4px 24px rgba(0,0,0,0.15); max-height:80vh; overflow-y:auto; display:none; border-radius:0 0 var(--radius) var(--radius); }
+.notif-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 -4px 24px rgba(0,0,0,0.15); max-height:80vh; overflow-y:auto; display:none; border-radius:16px 16px 0 0; }
 .notif-panel.open { display:block; }
-.notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; border-bottom:0.5px solid var(--border); position:sticky; top:0; background:var(--card); z-index:1; }
+.notif-handle { width:32px; height:3px; background:var(--border); border-radius:2px; margin:10px auto 0; }
+.notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px 10px; border-bottom:0.5px solid var(--border); position:sticky; top:0; background:var(--card); z-index:1; }
 .notif-panel-title { font-size:15px; font-weight:500; }
 .notif-clear-btn { font-size:11px; color:#9B3A3A; cursor:pointer; background:none; border:none; font-family:inherit; }
 .notif-item { display:flex; align-items:flex-start; gap:10px; padding:11px 16px; border-bottom:0.5px solid var(--border); }
@@ -984,6 +985,7 @@ select, input[type="date"] {
 
 <div class="notif-overlay" id="notifOverlay" onclick="closeNotifPanel()"></div>
 <div class="notif-panel" id="notifPanel">
+  <div class="notif-handle"></div>
   <div class="notif-panel-header">
     <div class="notif-panel-title">Notifiche</div>
     <button class="notif-clear-btn" onclick="markAllRead()">Segna tutto come letto</button>
