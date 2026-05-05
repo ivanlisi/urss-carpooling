@@ -2326,6 +2326,12 @@ async function selectTurnVehicle(idx) {
 function renderPresenceModal(ds) {
   const list = document.getElementById('presenceList');
   if (!list) return;
+  // Disable after 07:45 Italian time
+  const now = new Date();
+  const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
+  const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
+  const todayStr = italianNow.toISOString().slice(0,10);
+  const isPast = ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 45)));
   let html = '';
   DRIVERS.forEach(function(name) {
     const col = getUserColor(name);
@@ -2333,18 +2339,23 @@ function renderPresenceModal(ds) {
     const isMe = name === currentUser;
     if (isMe) {
       const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
-      const badgeTxt = absent ? 'non ci sono v' : 'ci sono v';
+      const badgeTxt = absent ? 'non ci sono' : 'ci sono';
       html += '<div class="presence-row me-row"><div class="presence-user">';
       html += '<div class="presence-av" style="background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
       html += '<div class="presence-name">' + name + ' <span style="font-size:10px;color:var(--muted)">(tu)</span></div>';
       html += '</div><div style="position:relative">';
-      html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown(&quot;' + ds + '&quot;)">' + badgeTxt + '</div>';
-      html += '<div class="presence-dropdown" id="presenceDrop_' + ds + '" style="display:none">';
-      const activeYes = !absent ? 'active' : '';
-      const activeNo = absent ? 'active' : '';
-      html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="togglePresence(&quot;' + ds + '&quot;, true)">Ci sono</div>';
-      html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence(&quot;' + ds + '&quot;, false)">Non ci sono</div>';
-      html += '</div></div></div>';
+      if (isPast) {
+        html += '<div class="' + badgeCls + '" style="opacity:0.5;cursor:default">' + badgeTxt + '</div>';
+      } else {
+        html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown(&quot;' + ds + '&quot;)">' + badgeTxt + ' ▾</div>';
+        html += '<div class="presence-dropdown" id="presenceDrop_' + ds + '" style="display:none">';
+        const activeYes = !absent ? 'active' : '';
+        const activeNo = absent ? 'active' : '';
+        html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="togglePresence(&quot;' + ds + '&quot;, true)">Ci sono</div>';
+        html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence(&quot;' + ds + '&quot;, false)">Non ci sono</div>';
+        html += '</div>';
+      }
+      html += '</div></div>';
     } else {
       const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
       const badgeTxt2 = absent ? 'non ci sara' : 'presente';
