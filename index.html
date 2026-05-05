@@ -814,6 +814,27 @@ select, input[type="date"] {
 .splash-title { font-family: "DM Mono", monospace; font-size: 36px; font-weight: 500; color: white; letter-spacing: -1px; }
 .splash-sub { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 6px; }
 
+/* NOTIFICATIONS */
+.notif-bell-btn { position:relative; }
+.notif-badge { position:absolute; top:-3px; right:-3px; width:16px; height:16px; background:#ea994d; border-radius:50%; border:1.5px solid #9B3A3A; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; display:none; }
+.notif-badge.visible { display:flex; }
+.notif-overlay { position:fixed; inset:0; z-index:200; background:transparent; display:none; }
+.notif-overlay.open { display:block; }
+.notif-panel { position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 4px 24px rgba(0,0,0,0.15); max-height:80vh; overflow-y:auto; display:none; border-radius:0 0 var(--radius) var(--radius); }
+.notif-panel.open { display:block; }
+.notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; border-bottom:0.5px solid var(--border); position:sticky; top:0; background:var(--card); z-index:1; }
+.notif-panel-title { font-size:15px; font-weight:500; }
+.notif-clear-btn { font-size:11px; color:#9B3A3A; cursor:pointer; background:none; border:none; font-family:inherit; }
+.notif-item { display:flex; align-items:flex-start; gap:10px; padding:11px 16px; border-bottom:0.5px solid var(--border); }
+.notif-item:last-child { border-bottom:none; }
+.notif-item.unread { background:#FFF8F5; }
+.notif-icon-circle { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; }
+.notif-body { flex:1; }
+.notif-text { font-size:12px; color:var(--text); line-height:1.4; }
+.notif-time { font-size:10px; color:var(--muted); margin-top:2px; }
+.notif-unread-dot { width:6px; height:6px; background:#ea994d; border-radius:50%; flex-shrink:0; margin-top:5px; }
+.notif-empty { padding:32px 16px; text-align:center; color:var(--muted); font-size:13px; }
+
 /* TOGGLE */
 .toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
@@ -953,6 +974,15 @@ select, input[type="date"] {
     <button class="tab-btn" onclick="switchTab('statistiche', this)">Statistiche</button>
     <button class="tab-btn" id="tabProfilo" onclick="switchTab('profilo', this)">Profilo</button>
   </div>
+</div>
+
+<div class="notif-overlay" id="notifOverlay" onclick="closeNotifPanel()"></div>
+<div class="notif-panel" id="notifPanel">
+  <div class="notif-panel-header">
+    <div class="notif-panel-title">Notifiche</div>
+    <button class="notif-clear-btn" onclick="markAllRead()">Segna tutto come letto</button>
+  </div>
+  <div id="notifList"><div class="notif-empty">Nessuna notifica</div></div>
 </div>
 
 <div class="content">
@@ -2180,6 +2210,21 @@ async function saveNotifPref(type, value) {
   }
 }
 
+// Save notification to Firestore for each user
+async function saveNotificationForAll(type, title, body) {
+  if (!window._db || !window._fsSetDoc || !window._fsDoc) return;
+  const ts = new Date().toISOString();
+  const id = ts.replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2,6);
+  DRIVERS.forEach(async function(name) {
+    try {
+      await window._fsSetDoc(
+        window._fsDoc(window._db, 'notifications', name + '_' + id),
+        { userId: name, type, title, body, ts, read: false }
+      );
+    } catch(e) {}
+  });
+}
+
 // Send push to all users with a specific pref enabled
 async function sendPushToAll(type, title, body) {
   try {
@@ -2257,7 +2302,29 @@ async function togglePresence(ds, isPresent) {
   renderTurnList();
   renderCalendar();
   renderPresenceModal(ds);
-  if (!isPresent) sendPushToAll('assenza', 'Macchinata', absentBannerText([currentUser]));
+  if (!isPresent) {
+    // Build date-aware notification text
+    const now = new Date();
+    const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
+    const italianNow = new Date(now.getTime() + italianOffset * 3600000);
+    const todayStr = italianNow.toISOString().slice(0,10);
+    const tomorrowDate = new Date(italianNow);
+    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+    const tomorrowStr = tomorrowDate.toISOString().slice(0,10);
+    const dayNames = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+    const monthNames = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    let datePrefix;
+    if (ds === tomorrowStr) {
+      datePrefix = 'Domani';
+    } else {
+      const d = new Date(ds + 'T00:00:00Z');
+      datePrefix = dayNames[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthNames[d.getUTCMonth()];
+    }
+    const absent = [currentUser];
+    const who = absent.length === 1 ? absent[0] : absent.slice(0,-1).join(', ') + ' e ' + absent[absent.length-1];
+    const verb = absent.length === 1 ? 'non sarà' : 'non saranno';
+    sendPushToAll('assenza', '🚗 Macchinata', datePrefix + ' ' + who + ' ' + verb + ' in macchinata');
+  }
 }
 
 function openPresenceModal(ds) {
@@ -2399,6 +2466,116 @@ async function loadPresences() {
     renderTurnList();
     renderCalendar();
   } catch(e) { console.warn('Load presences error', e); }
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+let notifications = [];
+let notifPanelOpen = false;
+
+async function loadNotifications() {
+  if (!window._db || !window._fsGetDocs || !window._fsColl || !currentUser) return;
+  try {
+    const snap = await window._fsGetDocs(window._fsColl(window._db, 'notifications'));
+    notifications = [];
+    snap.forEach(function(doc) {
+      const d = doc.data();
+      if (d.userId === currentUser) notifications.push({ id: doc.id, ...d });
+    });
+    notifications.sort(function(a,b) { return b.ts.localeCompare(a.ts); });
+    updateNotifBadge();
+    renderNotifList();
+  } catch(e) { console.warn('Load notifications error', e); }
+}
+
+function updateNotifBadge() {
+  const unread = notifications.filter(function(n) { return !n.read; }).length;
+  const badge = document.getElementById('notifBadge');
+  if (!badge) return;
+  if (unread > 0) {
+    badge.textContent = unread > 9 ? '9+' : unread;
+    badge.classList.add('visible');
+    if (navigator.setAppBadge) navigator.setAppBadge(unread);
+  } else {
+    badge.classList.remove('visible');
+    if (navigator.clearAppBadge) navigator.clearAppBadge();
+  }
+}
+
+function renderNotifList() {
+  const list = document.getElementById('notifList');
+  if (!list) return;
+  if (!notifications.length) {
+    list.innerHTML = '<div class="notif-empty">Nessuna notifica</div>';
+    return;
+  }
+  const ICONS = { assenza:'🚗', cambio:'🔄', serale:'🚗', weekend:'☭' };
+  const BGS = { assenza:'#FEF0EE', cambio:'#F0F7F4', serale:'#F2F0EB', weekend:'#F2F0EB' };
+  list.innerHTML = notifications.slice(0,30).map(function(n) {
+    const icon = ICONS[n.type] || '🔔';
+    const bg = BGS[n.type] || '#F2F0EB';
+    const tsDate = new Date(n.ts);
+    const now = new Date();
+    const diffDays = Math.floor((now - tsDate) / 86400000);
+    const timeHM = tsDate.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+    const days = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+    const timeStr = diffDays === 0 ? 'oggi ' + timeHM : diffDays === 1 ? 'ieri ' + timeHM : days[tsDate.getDay()] + ' ' + timeHM;
+    return '<div class="notif-item ' + (n.read ? '' : 'unread') + '">' +
+      '<div class="notif-icon-circle" style="background:' + bg + '">' + icon + '</div>' +
+      '<div class="notif-body">' +
+        '<div class="notif-text"><strong>' + n.title + '</strong> — ' + n.body + '</div>' +
+        '<div class="notif-time">' + timeStr + '</div>' +
+      '</div>' +
+      (n.read ? '' : '<div class="notif-unread-dot"></div>') +
+    '</div>';
+  }).join('');
+}
+
+function toggleNotifPanel() {
+  notifPanelOpen ? closeNotifPanel() : openNotifPanel();
+}
+
+function openNotifPanel() {
+  notifPanelOpen = true;
+  document.getElementById('notifPanel').classList.add('open');
+  document.getElementById('notifOverlay').classList.add('open');
+  markAllRead();
+}
+
+function closeNotifPanel() {
+  notifPanelOpen = false;
+  document.getElementById('notifPanel').classList.remove('open');
+  document.getElementById('notifOverlay').classList.remove('open');
+}
+
+async function markAllRead() {
+  const unread = notifications.filter(function(n) { return !n.read; });
+  if (!unread.length) { renderNotifList(); return; }
+  unread.forEach(function(n) { n.read = true; });
+  updateNotifBadge();
+  renderNotifList();
+  if (window._fsSetDoc && window._fsDoc && window._db) {
+    unread.forEach(async function(n) {
+      try {
+        const { setDoc, doc, getFirestore } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+        await setDoc(doc(window._db, 'notifications', n.id), { read: true }, { merge: true });
+      } catch(e) {}
+    });
+  }
+}
+
+async function setupNotifListener() {
+  if (!window._db || !currentUser) return;
+  try {
+    const { collection, query, where, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+    const q = query(collection(window._db, 'notifications'), where('userId', '==', currentUser));
+    onSnapshot(q, function(snap) {
+      notifications = [];
+      snap.forEach(function(doc) { notifications.push({ id: doc.id, ...doc.data() }); });
+      notifications.sort(function(a,b) { return b.ts.localeCompare(a.ts); });
+      updateNotifBadge();
+      if (notifPanelOpen) renderNotifList();
+    });
+  } catch(e) { console.warn('Notif listener error', e); }
 }
 
 // ── VEHICLES ─────────────────────────────────────────────────────────────────
@@ -2754,6 +2931,8 @@ async function loginUser(name) {
   if (splash) { splash.classList.add('hidden'); setTimeout(() => splash.remove(), 300); }
   // Register push notifications
   setTimeout(registerPush, 1000);
+  // Setup notification listener
+  setTimeout(setupNotifListener, 800);
 }
 
 function updateTabLabel() {
