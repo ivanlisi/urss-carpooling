@@ -97,6 +97,16 @@ body::before {
   };
 
   // Load absences from Firestore
+  window._loadPresencesRT = async function() {
+    onSnapshot(collection(db, "presences"), (snap) => {
+      snap.forEach(doc => {
+        presences[doc.id] = doc.data();
+        window.presences[doc.id] = doc.data();
+      });
+      if (typeof renderTurnList === "function") { renderTurnList(); renderCalendar(); }
+    }, (e) => { console.warn("Presences RT error", e); });
+  };
+
   window._loadAbsences = async function() {
     // Use real-time listener
     onSnapshot(collection(db, 'absences'), (snap) => {
@@ -772,6 +782,26 @@ select, input[type="date"] {
 /* PROFILE PAGE */
 .profile-page { }
 
+/* PRESENCE SYSTEM */
+.absent-dot { position:absolute; top:3px; right:3px; width:6px; height:6px; background:#dd785b; border-radius:50%; z-index:2; }
+.absent-banner { background:#FFF3E6; border-top:0.5px solid #ea994d; padding:7px 14px; display:flex; align-items:center; gap:6px; font-size:11px; color:#7A4A10; }
+.absent-banner-icon { width:14px; height:14px; background:#ea994d; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; color:white; flex-shrink:0; }
+.presence-section { border:1px solid var(--border); border-radius:var(--radius-sm); overflow:visible; margin-bottom:14px; }
+.presence-row { display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border-bottom:0.5px solid var(--border); position:relative; }
+.presence-row:last-child { border-bottom:none; }
+.presence-row.me-row { background:#F8F6F2; }
+.presence-user { display:flex; align-items:center; gap:8px; }
+.presence-av { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:500; flex-shrink:0; }
+.presence-name { font-size:13px; color:var(--text); }
+.pbadge-yes { font-size:11px; background:#D8EEE4; color:#143325; padding:3px 9px; border-radius:10px; }
+.pbadge-no { font-size:11px; background:#FDEBD5; color:#7A4A10; padding:3px 9px; border-radius:10px; }
+.pbadge-me { font-size:11px; background:#2D6A4F; color:white; padding:3px 9px; border-radius:10px; cursor:pointer; position:relative; }
+.pbadge-me.absent { background:#dd785b; }
+.presence-dropdown { position:absolute; right:0; top:calc(100% + 4px); z-index:100; background:var(--card); border:0.5px solid var(--border); border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.12); min-width:130px; }
+.pdrop-opt { font-size:12px; padding:9px 12px; cursor:pointer; border-bottom:0.5px solid var(--border); display:flex; align-items:center; gap:6px; }
+.pdrop-opt:last-child { border-bottom:none; }
+.pdrop-opt.active { font-weight:500; }
+.turn-card.incomplete { border-color:#ea994d; }
 /* TOGGLE */
 .toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
@@ -1083,6 +1113,17 @@ select, input[type="date"] {
       <button class="btn-secondary" onclick="closeChangeNameModal()">Annulla</button>
       <button class="btn-primary" onclick="confirmChangeName()">Salva</button>
     </div>
+  </div>
+</div>
+
+<!-- PRESENCE MODAL -->
+<div class="modal-overlay" id="presenceModal" onclick="if(event.target===this)closePresenceModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="presenceModalTitle"></div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="presenceModalSub"></div>
+    <div class="section-label" style="margin-bottom:8px">Chi c'e' in macchinata</div>
+    <div class="presence-section" id="presenceList"></div>
   </div>
 </div>
 
@@ -1650,7 +1691,7 @@ function renderHero() {
       <div class="hero-name">${driver}</div>
       <div class="hero-detail">${detailText}</div>
     </div>
-    <button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${dayNames[d.getDay()]}', 'placeholder')">modifica</button>
+    <button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${dayNames[d.getDay()]}', '${['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][d.getMonth()]}')">modifica</button>
   `;
 }
 
@@ -1684,8 +1725,12 @@ function renderTurnList() {
         : `background:${c.bg};color:${c.fg}`;
       const subText = isModified ? 'turno modificato' : (note || 'Via Tarkowskij · 07:45');
       const subStyle = isModified ? 'font-style:italic;color:var(--warn)' : '';
+      const absentList = getAbsentForDay(ds);
+      const absentHtml = absentList.length > 0
+        ? '<div class="absent-banner"><div class="absent-banner-icon">!</div>' + absentBannerText(absentList) + '</div>'
+        : "";
       html += `
-        <div class="turn-card ${isToday?'today-turn':''}">
+        <div class="turn-card ${isToday?'today-turn':''} ${absentList.length>0?'incomplete':''}">
           <div class="turn-row">
             <div class="turn-date-col">
               <div class="turn-day-num">${d.getDate()}</div>
@@ -1698,6 +1743,7 @@ function renderTurnList() {
             </div>
             <button class="swap-btn" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${days[d.getDay()]}', '${months[d.getMonth()]}')">modifica</button>
           </div>
+          ${absentHtml}
         </div>`;
       shown++;
     }
@@ -1759,8 +1805,11 @@ function renderCalendar() {
     } else {
       bandHtml = `<div class="day-band">fest</div>`;
     }
+    const absentDs = !holiday ? getAbsentForDay(ds) : [];
+    const absDot = absentDs.length > 0 ? '<div class="absent-dot"></div>' : "";
     const cls = ['cal-day', isToday?'today':'', holiday?'holiday':'', modClass].filter(Boolean).join(' ');
-    html += `<div class="${cls}" style="${tileStyle}"><span class="day-num">${dd}</span>${bandHtml}</div>`;
+    const clickAttr = !holiday ? `onclick="openPresenceModal('${ds}')" style="${tileStyle};cursor:pointer"` : `style="${tileStyle}"`;
+    html += `<div class="${cls}" ${clickAttr}><span class="day-num">${dd}</span>${bandHtml}${absDot}</div>`;
   });
 
   grid.innerHTML = html;
@@ -2154,6 +2203,118 @@ async function confirmReset() {
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
+
+// -- PRESENCE SYSTEM --
+let presences = {};
+window.presences = presences;
+
+function getAbsentForDay(ds) {
+  const dp = presences[ds] || {};
+  return DRIVERS.filter(function(name) { return dp[name] === false; });
+}
+
+function isAbsentForDay(ds, name) {
+  return presences[ds] && presences[ds][name] === false;
+}
+
+function absentBannerText(absent) {
+  if (!absent.length) return '';
+  if (absent.length === 1) return absent[0] + ' non sara in macchinata';
+  if (absent.length === 2) return absent[0] + ' e ' + absent[1] + ' non saranno in macchinata';
+  return absent.slice(0,-1).join(', ') + ' e ' + absent[absent.length-1] + ' non saranno in macchinata';
+}
+
+async function togglePresence(ds, isPresent) {
+  if (!currentUser) return;
+  document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
+  if (!presences[ds]) presences[ds] = {};
+  presences[ds][currentUser] = isPresent;
+  window.presences = presences;
+  if (window._fsSetDoc && window._fsDoc && window._db) {
+    try {
+      await window._fsSetDoc(window._fsDoc(window._db, 'presences', ds), presences[ds]);
+    } catch(e) { console.warn('Presence save error', e); }
+  }
+  renderTurnList();
+  renderCalendar();
+  renderPresenceModal(ds);
+  if (!isPresent) sendPushToAll('assenza', 'Macchinata', absentBannerText([currentUser]));
+}
+
+function openPresenceModal(ds) {
+  if (!ds) return;
+  const d = new Date(ds + 'T00:00:00Z');
+  if (isHoliday(d)) return;
+  const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const driver = getEffectiveDriver(d);
+  const prof = window.userProfiles[driver] || {};
+  const veh = getActiveVehicle(prof);
+  const vehStr = veh ? ' - ' + veh.brand + ' ' + veh.model : '';
+  document.getElementById('presenceModalTitle').textContent = dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()];
+  document.getElementById('presenceModalSub').textContent = 'Guida ' + driver + vehStr + ' - 07:45';
+  renderPresenceModal(ds);
+  document.getElementById('presenceModal').classList.add('open');
+}
+
+function closePresenceModal() {
+  document.getElementById('presenceModal').classList.remove('open');
+  document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
+}
+
+function renderPresenceModal(ds) {
+  const list = document.getElementById('presenceList');
+  if (!list) return;
+  let html = '';
+  DRIVERS.forEach(function(name) {
+    const col = getUserColor(name);
+    const absent = isAbsentForDay(ds, name);
+    const isMe = name === currentUser;
+    if (isMe) {
+      const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
+      const badgeTxt = absent ? 'non ci sono v' : 'ci sono v';
+      html += '<div class="presence-row me-row"><div class="presence-user">';
+      html += '<div class="presence-av" style="background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
+      html += '<div class="presence-name">' + name + ' <span style="font-size:10px;color:var(--muted)">(tu)</span></div>';
+      html += '</div><div style="position:relative">';
+      html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown('' + ds + '')">' + badgeTxt + '</div>';
+      html += '<div class="presence-dropdown" id="presenceDrop_' + ds + '" style="display:none">';
+      const activeYes = !absent ? 'active' : '';
+      const activeNo = absent ? 'active' : '';
+      html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="togglePresence('' + ds + '', true)">Ci sono</div>';
+      html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence('' + ds + '', false)">Non ci sono</div>';
+      html += '</div></div></div>';
+    } else {
+      const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
+      const badgeTxt2 = absent ? 'non ci sara' : 'presente';
+      html += '<div class="presence-row"><div class="presence-user">';
+      html += '<div class="presence-av" style="background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
+      html += '<div class="presence-name">' + name + '</div></div>';
+      html += '<span class="' + badgeCls2 + '">' + badgeTxt2 + '</span></div>';
+    }
+  });
+  list.innerHTML = html;
+}
+
+function togglePresenceDropdown(ds) {
+  const drop = document.getElementById('presenceDrop_' + ds);
+  if (!drop) return;
+  const isOpen = drop.style.display !== 'none';
+  document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
+  if (!isOpen) drop.style.display = 'block';
+}
+
+async function loadPresences() {
+  if (!window._db || !window._fsGetDocs || !window._fsColl) return;
+  try {
+    const snap = await window._fsGetDocs(window._fsColl(window._db, 'presences'));
+    snap.forEach(function(doc) { presences[doc.id] = doc.data(); });
+    window.presences = presences;
+    renderTurnList();
+    renderCalendar();
+  } catch(e) { console.warn('Load presences error', e); }
+}
+
 // ── VEHICLES ─────────────────────────────────────────────────────────────────
 function renderVehicleCards(profile) {
   const vehicles = profile?.vehicles || [];
@@ -2710,8 +2871,10 @@ async function init() {
   // Set up real-time listeners (they will trigger renders automatically)
   if (window._loadExceptions) window._loadExceptions();
   if (window._loadAbsences) window._loadAbsences();
+  if (window._loadPresencesRT) window._loadPresencesRT();
   // Initial render with any cached data
   loadFuelPrices();
+  loadPresences();
   renderHero();
   renderTurnList();
   renderCalendar();
