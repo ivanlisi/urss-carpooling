@@ -1587,8 +1587,7 @@ function calcSavings(vehicle, kmSaved) {
     cost: Math.round(cost * 10) / 10,
     fuel: Math.round(fuelUsed * 10) / 10,
     co2: Math.round(co2 * 10) / 10,
-    unit: FUEL_UNIT[vehicle.fuel] || 'L',
-    fuel: vehicle.fuel || 'benzina'
+    unit: FUEL_UNIT[vehicle.fuel] || 'L'
   };
 }
 
@@ -1914,7 +1913,6 @@ function renderSavingsSection() {
           '<div><div style="font-size:13px;font-weight:500">' + currentUser + '</div>' +
           '<div style="font-size:11px;color:var(--muted)">' + vehicle.brand + ' ' + vehicle.model + ' · ' + vehicle.engine + '</div></div>' +
         '</div>' +
-        (vehicles.length > 1 ? '<button onclick="openChangeVehicleModal()" style="font-size:11px;color:#9B3A3A;border:0.5px solid #9B3A3A;background:none;border-radius:20px;padding:4px 10px;cursor:pointer">cambia auto</button>' : '') +
       '</div>' +
       '<div style="text-align:center;padding:8px 0 14px;border-bottom:0.5px solid var(--border);margin-bottom:14px">' +
         '<div class="savings-amount">&#8364; ' + currentMonthSav.cost.toFixed(0) + '</div>' +
