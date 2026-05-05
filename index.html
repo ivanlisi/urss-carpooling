@@ -1709,7 +1709,14 @@ function renderHero() {
       <div class="hero-name">${driver}</div>
       <div class="hero-detail">${detailText}</div>
     </div>
-    <button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${dayNames[d.getDay()]}', '${['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][d.getMonth()]}')">modifica</button>
+    ${(() => {
+      const nowIt = new Date(new Date().getTime() + ((new Date().getMonth()>=2&&new Date().getMonth()<=9)?2:1)*3600000);
+      const todayIt = nowIt.toISOString().slice(0,10);
+      const isPastDeparture = ds < todayIt || (ds === todayIt && (nowIt.getUTCHours() > 7 || (nowIt.getUTCHours() === 7 && nowIt.getUTCMinutes() >= 45)));
+      return isPastDeparture
+        ? '<button class="hero-badge" style="opacity:0.4;cursor:default;background:rgba(255,255,255,0.1);border:none;color:white;font-family:inherit" disabled>modifica</button>'
+        : '<button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal(\'' + ds + '\', \'' + driver + '\', ' + d.getDate() + ', \'' + dayNames[d.getDay()] + '\', \'' + ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][d.getMonth()] + '\')">modifica</button>';
+    })()}
   `;
 }
 
