@@ -1910,8 +1910,7 @@ function renderSavingsSection() {
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
           '<div class="turn-avatar" style="background:' + col.bg + ';color:' + col.fg + ';width:36px;height:36px">' + currentUser[0] + '</div>' +
-          '<div><div style="font-size:13px;font-weight:500">' + currentUser + '</div>' +
-          '<div style="font-size:11px;color:var(--muted)">' + vehicle.brand + ' ' + vehicle.model + ' · ' + vehicle.engine + '</div></div>' +
+          '<div style="font-size:16px;font-weight:500">' + currentUser + '</div>' +
         '</div>' +
       '</div>' +
       '<div style="text-align:center;padding:8px 0 14px;border-bottom:0.5px solid var(--border);margin-bottom:14px">' +
@@ -1920,7 +1919,7 @@ function renderSavingsSection() {
       '</div>' +
       '<div class="savings-metrics">' +
         '<div class="savings-metric"><div class="savings-metric-val">' + Math.round(currentMonthKm) + '</div><div class="savings-metric-label">km non percorsi</div></div>' +
-        '<div class="savings-metric"><div class="savings-metric-val">' + currentMonthSav.fuel + ' ' + currentMonthSav.unit + '</div><div class="savings-metric-label">carburante</div></div>' +
+        '<div class="savings-metric"><div class="savings-metric-val">' + currentMonthSav.fuel + ' ' + (currentMonthSav.unit || 'L') + '</div><div class="savings-metric-label">carburante</div></div>' +
         '<div class="savings-metric"><div class="savings-metric-val" style="font-size:12px;color:#2D6A4F">' + currentMonthSav.co2 + ' kg</div><div class="savings-metric-label">CO2</div></div>' +
       '</div>' +
       '<div class="savings-bars">' +
