@@ -1122,6 +1122,10 @@ select, input[type="date"] {
     <div class="modal-handle"></div>
     <div class="modal-title" id="presenceModalTitle"></div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="presenceModalSub"></div>
+    <div id="vehicleSelectorSection" style="display:none;margin-bottom:14px">
+      <div class="section-label" style="margin-bottom:8px">Con che auto?</div>
+      <div id="vehicleSelectorList" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden"></div>
+    </div>
     <div class="section-label" style="margin-bottom:8px">Chi c'e' in macchinata</div>
     <div class="presence-section" id="presenceList"></div>
   </div>
@@ -1853,9 +1857,10 @@ function renderSavingsSection() {
   const months = {};
   let totalKmSaved = 0;
 
-  Object.entries(turniCompletati).forEach(([ds, driver]) => {
-    if (ds < resetDate) return;
-    if (driver === currentUser) return;
+  Object.entries(turniCompletati).forEach(([ds, turnData]) => {
+    const driverName = typeof turnData === 'string' ? turnData : turnData.driver;
+    if (!driverName || ds < resetDate) return;
+    if (driverName === currentUser) return;
     if (isAbsentDay(ds)) return;
     totalKmSaved += ROUND_TRIP_KM;
     const month = ds.slice(0, 7);
@@ -2254,12 +2259,68 @@ function openPresenceModal(ds) {
   document.getElementById('presenceModalTitle').textContent = dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()];
   document.getElementById('presenceModalSub').textContent = 'Guida ' + driver + vehStr + ' - 07:45';
   renderPresenceModal(ds);
+  // Show vehicle selector only if current user is the driver
+  const isDriver = driver === currentUser;
+  renderVehicleSelectorInModal(ds, isDriver);
   document.getElementById('presenceModal').classList.add('open');
 }
 
 function closePresenceModal() {
   document.getElementById('presenceModal').classList.remove('open');
   document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
+}
+
+let currentPresenceDs = null;
+
+function renderVehicleSelectorInModal(ds, isDriver) {
+  currentPresenceDs = ds;
+  const section = document.getElementById('vehicleSelectorSection');
+  const list = document.getElementById('vehicleSelectorList');
+  if (!section || !list) return;
+  if (!isDriver || !currentUser) { section.style.display = 'none'; return; }
+
+  const profile = window.userProfiles[currentUser] || {};
+  const vehicles = profile.vehicles || [];
+  if (!vehicles.length) { section.style.display = 'none'; return; }
+
+  // Get saved vehicle for this turn (from turniCompletati or default active)
+  const savedVehicleIdx = turniCompletati[ds]?.vehicleIdx;
+  const activeIdx = savedVehicleIdx !== undefined ? savedVehicleIdx : vehicles.findIndex(function(v) { return v.active; });
+
+  const chevron = '<svg width="10" height="6" viewBox="0 0 10 6" fill="none" style="flex-shrink:0"><path d="M1 1l4 4 4-4" stroke="#2D6A4F" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  list.innerHTML = vehicles.map(function(v, i) {
+    const isActive = i === activeIdx;
+    const isDefault = !!v.active;
+    return '<div class="vehicle-opt ' + (isActive ? 'active' : '') + '" onclick="selectTurnVehicle(' + i + ')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:0.5px solid var(--border);cursor:pointer;background:' + (isActive ? '#F0F7F4' : 'white') + '">' +
+      '<div style="width:18px;height:18px;border-radius:50%;border:1.5px solid ' + (isActive ? '#2D6A4F' : 'var(--border)') + ';background:' + (isActive ? '#2D6A4F' : 'transparent') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0">' +
+      (isActive ? chevron : '') +
+      '</div>' +
+      '<div style="flex:1"><div style="font-size:12px;font-weight:' + (isActive ? '500' : '400') + ';color:var(--text)">' + v.brand + ' ' + v.model + '</div>' +
+      '<div style="font-size:10px;color:var(--muted)">' + v.engine + (isDefault ? ' · default' : '') + '</div></div>' +
+      '</div>';
+  }).join('').replace(/border-bottom:0\.5px solid var\(--border\)(?=[^>]*><\/div><\/div>$)/, '');
+
+  section.style.display = 'block';
+}
+
+async function selectTurnVehicle(idx) {
+  if (!currentPresenceDs || !currentUser) return;
+  // Save vehicle index for this turn
+  if (!turniCompletati[currentPresenceDs]) turniCompletati[currentPresenceDs] = {};
+  turniCompletati[currentPresenceDs].vehicleIdx = idx;
+  // Save to Firestore
+  if (window._fsSetDoc && window._fsDoc && window._db) {
+    try {
+      const existing = turniCompletati[currentPresenceDs] || {};
+      await window._fsSetDoc(
+        window._fsDoc(window._db, 'turni_completati', currentPresenceDs),
+        { ...existing, driver: currentUser, vehicleIdx: idx }
+      );
+    } catch(e) { console.warn('Vehicle turn save error', e); }
+  }
+  renderVehicleSelectorInModal(currentPresenceDs, true);
+  renderSavingsSection();
 }
 
 function renderPresenceModal(ds) {
