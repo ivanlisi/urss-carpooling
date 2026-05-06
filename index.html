@@ -51,6 +51,7 @@ body::before {
   window._fsDoc = doc;
   window._fsGetDoc = getDoc;
   window._fsSetDoc = setDoc;
+  window._fsDeleteDoc = deleteDoc;
   window._fsColl = collection;
   window._fsGetDocs = getDocs;
 
@@ -988,7 +989,7 @@ select, input[type="date"] {
   <div class="notif-handle"></div>
   <div class="notif-panel-header">
     <div class="notif-panel-title">Notifiche</div>
-    <button class="notif-clear-btn" onclick="markAllRead()">Cancella notifiche</button>
+    <button class="notif-clear-btn" onclick="deleteAllNotifications()">Cancella notifiche</button>
   </div>
   <div id="notifList"><div class="notif-empty">Nessuna notifica</div></div>
 </div>
@@ -2556,16 +2557,30 @@ function closeNotifPanel() {
 }
 
 async function markAllRead() {
+  // Called on panel open - mark all as read silently
   const unread = notifications.filter(function(n) { return !n.read; });
-  if (!unread.length) { renderNotifList(); return; }
+  if (!unread.length) return;
   unread.forEach(function(n) { n.read = true; });
   updateNotifBadge();
-  renderNotifList();
   if (window._fsSetDoc && window._fsDoc && window._db) {
     unread.forEach(async function(n) {
       try {
-        const { setDoc, doc, getFirestore } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
-        await setDoc(doc(window._db, 'notifications', n.id), { read: true }, { merge: true });
+        await window._fsSetDoc(window._fsDoc(window._db, 'notifications', n.id), { read: true }, { merge: true });
+      } catch(e) {}
+    });
+  }
+}
+
+async function deleteAllNotifications() {
+  if (!notifications.length) return;
+  const toDelete = [...notifications];
+  notifications = [];
+  updateNotifBadge();
+  renderNotifList();
+  if (window._fsDeleteDoc && window._fsDoc && window._db) {
+    toDelete.forEach(async function(n) {
+      try {
+        await window._fsDeleteDoc(window._fsDoc(window._db, 'notifications', n.id));
       } catch(e) {}
     });
   }
