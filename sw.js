@@ -1,10 +1,15 @@
 self.addEventListener('push', function(event) {
   if (!event.data) return;
   let data;
-  try { data = event.data.json(); } catch(e) { data = { title: 'URSS', body: event.data.text() }; }
+  try { data = event.data.json(); } catch(e) { data = { title: event.data.text(), body: '' }; }
+  
+  // title contains the full message, show "from URSS" as notification title
+  const notifTitle = 'from URSS';
+  const notifBody = data.title || data.body || '';
+
   event.waitUntil(
-    self.registration.showNotification(data.title || 'URSS Carpooling', {
-      body: data.body || '',
+    self.registration.showNotification(notifTitle, {
+      body: notifBody,
       icon: '/urss-icon.png',
       badge: '/urss-icon.png',
       vibrate: [200, 100, 200],
