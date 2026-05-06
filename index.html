@@ -1009,7 +1009,7 @@ select, input[type="date"] {
     </div>
     <div class="cal-grid" id="calGrid"></div>
 
-    <div class="section-label" style="margin-top:16px">Assenze programmate</div>
+    <div class="section-label" style="margin-top:16px">Pianifica assenza continuativa</div>
     <div id="absenceList"></div>
 
     <div class="form-card">
@@ -1041,9 +1041,9 @@ select, input[type="date"] {
   <!-- STATISTICHE PAGE -->
   <div id="page-statistiche" class="page" style="padding-bottom:80px">
     <div class="content">
-    <div id="savingsSection"></div>
     <div class="section-label">Turni effettuati</div>
     <div class="stats-grid" id="statsGrid"></div>
+    <div id="savingsSection" style="margin-top:8px"></div>
     </div>
 
   </div>
@@ -1722,7 +1722,7 @@ function renderHero() {
     do { d.setDate(d.getDate()+1); } while (!isWorkDay(d));
     label = 'Prossimo turno';
   }
-  const dateLabel = ` · ${dayNames[d.getDay()]} ${d.getDate()}`;
+  const dateLabel = `${dayNames[d.getDay()]} ${d.getDate()}`;
   const ds = toDateStr(d);
   const driver = getEffectiveDriver(d);
   const baseDriver = getDriverForDate(d);
@@ -1738,7 +1738,7 @@ function renderHero() {
   hero.innerHTML = `
     <div class="hero-avatar" style="${avatarStyle}">${driver[0]}</div>
     <div class="hero-info">
-      <div class="hero-label">${label}${dateLabel}</div>
+      <div class="hero-label">${dateLabel} · ${label}</div>
       <div class="hero-name">${driver}</div>
       <div class="hero-detail">${detailText}</div>
     </div>
@@ -3200,6 +3200,22 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => { setTimeout(init, 600); });
+
+// Re-render hero at 07:45 to disable modifica button
+function scheduleHeroRefresh() {
+  const now = new Date();
+  const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
+  const italianNow = new Date(now.getTime() + italianOffset * 3600000);
+  const target = new Date(italianNow);
+  target.setUTCHours(7, 45, 0, 0);
+  let msUntil = target - italianNow;
+  if (msUntil < 0) msUntil += 24 * 60 * 60 * 1000; // tomorrow
+  setTimeout(function() {
+    renderHero();
+    renderTurnList();
+  }, msUntil);
+}
+scheduleHeroRefresh();
 
 // ── PUSH NOTIFICATIONS ────────────────────────────────────────────────────────
 const VAPID_PUBLIC_KEY = 'BN39wwjb-XAydFuxQ7X3y5i-lF3X_WNnAfW6mukkBGsXOzCwvkLhhiP2Rh0PZljH-issSY91JrIsnRqPM_MtkLk';
