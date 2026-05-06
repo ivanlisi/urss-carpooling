@@ -21,6 +21,14 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY
 );
 
+async function saveNotification(db, userId, type, title, body) {
+  try {
+    const ts = new Date().toISOString();
+    const id = userId + '_' + ts.replace(/[:.]/g, '-') + '_' + Math.random().toString(36).slice(2,5);
+    await db.collection('notifications').doc(id).set({ userId, type, title, body, ts, read: false });
+  } catch(e) { console.warn('saveNotification error', e); }
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
 
@@ -44,6 +52,7 @@ exports.handler = async (event) => {
 
       try {
         await webpush.sendNotification(subscription, JSON.stringify({ title, body }));
+        await saveNotification(db, userId, type, title, body);
         results.push({ user: userId, ok: true });
       } catch(e) {
         if (e.statusCode === 410) await doc.ref.delete();

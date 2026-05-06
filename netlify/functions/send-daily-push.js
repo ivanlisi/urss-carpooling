@@ -77,6 +77,14 @@ const WEEKEND_PHRASES = [
   "Il collettivo ha navigato la settimana con la grazia di un Lada su strada asfaltata.",
 ];
 
+async function saveNotification(db, userId, type, title, body) {
+  try {
+    const ts = new Date().toISOString();
+    const id = userId + '_' + ts.replace(/[:.]/g, '-') + '_' + Math.random().toString(36).slice(2,5);
+    await db.collection('notifications').doc(id).set({ userId, type, title, body, ts, read: false });
+  } catch(e) { console.warn('saveNotification error', e); }
+}
+
 exports.handler = async () => {
   const now = new Date();
 
@@ -108,8 +116,14 @@ exports.handler = async () => {
     return { statusCode: 200, body: 'Weekend message sent' };
   }
 
+  // Use Italian time to determine "today"
+  const month = now.getUTCMonth();
+  const italianOffset = (month >= 2 && month <= 9) ? 2 : 1; // CEST Mar-Oct, CET rest
+  const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
+  const todayIT = italianNow.toISOString().slice(0, 10);
+
   // Find next working day
-  const target = new Date(toDateStr(now) + 'T00:00:00Z');
+  const target = new Date(todayIT + 'T00:00:00Z');
   target.setUTCDate(target.getUTCDate() + 1);
   while (!isWorkDay(target)) target.setUTCDate(target.getUTCDate() + 1);
   const targetStr = toDateStr(target);
@@ -133,14 +147,21 @@ exports.handler = async () => {
     const { subscription } = doc.data();
     try {
       await webpush.sendNotification(subscription, JSON.stringify({ title, body }));
+      await saveNotification(db, doc.id, 'serale', title, body);
       results.push({ user: doc.id, ok: true });
     } catch(e) {
       console.error(`Failed for ${doc.id}:`, e.message);
-      // Remove invalid subscriptions
       if (e.statusCode === 410) await doc.ref.delete();
       results.push({ user: doc.id, ok: false });
     }
   }
+
+  // Save today's completed turn to Firestore
+  try {
+    const todayStr = toDateStr(now);
+    await db.collection('turni_completati').doc(todayStr).set({ driver, auto: 'default' });
+    console.log('Turno salvato:', todayStr, driver);
+  } catch(e) { console.warn('Save turno error', e); }
 
   console.log('Push results:', results);
   return { statusCode: 200, body: JSON.stringify({ sent: results.length }) };
