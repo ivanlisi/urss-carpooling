@@ -3,9 +3,8 @@ self.addEventListener('push', function(event) {
   let data;
   try { data = event.data.json(); } catch(e) { data = { title: event.data.text(), body: '' }; }
   
-  // title contains the full message, show "from URSS" as notification title
-  const notifTitle = 'from URSS';
-  const notifBody = data.title || data.body || '';
+  const notifTitle = data.title || data.body || 'URSS';
+  const notifBody = data.body && data.body !== data.title ? data.body : '';
 
   event.waitUntil(
     self.registration.showNotification(notifTitle, {
