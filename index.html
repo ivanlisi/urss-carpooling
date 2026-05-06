@@ -821,7 +821,7 @@ select, input[type="date"] {
 .notif-badge.visible { display:flex; }
 .notif-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity 0.3s ease; }
 .notif-overlay.open { opacity:1; pointer-events:all; }
-.notif-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%) translateY(100%); width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 -4px 32px rgba(0,0,0,0.2); height:85vh; overflow:hidden; display:flex; flex-direction:column; border-radius:16px 16px 0 0; transition:transform 0.35s cubic-bezier(0.32,0.72,0,1); }
+.notif-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%) translateY(100%); width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 -4px 32px rgba(0,0,0,0.2); height:72vh; overflow:hidden; display:flex; flex-direction:column; border-radius:16px 16px 0 0; transition:transform 0.35s cubic-bezier(0.32,0.72,0,1); }
 .notif-panel.open { transform:translateX(-50%) translateY(0); }
 .notif-handle { width:36px; height:4px; background:var(--border); border-radius:2px; margin:10px auto 6px; flex-shrink:0; }
 .notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 12px; border-bottom:0.5px solid var(--border); flex-shrink:0; background:var(--card); }
@@ -987,7 +987,7 @@ select, input[type="date"] {
 
 <div class="notif-overlay" id="notifOverlay" onclick="closeNotifPanel()"></div>
 <div class="notif-panel" id="notifPanel">
-  <div class="notif-handle"></div>
+  <div class="notif-handle" id="notifHandle"></div>
   <div class="notif-panel-header">
     <div class="notif-panel-title">Notifiche</div>
     <button class="notif-clear-btn" onclick="deleteAllNotifications()">Cancella notifiche</button>
