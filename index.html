@@ -1618,7 +1618,7 @@ let fuelPrices = { benzina: 1.812, diesel: 1.689, gpl: 0.721, ibrido: 1.812, ibr
 
 async function loadFuelPrices() {
   try {
-    const res = await fetch('/.netlify/functions/fuel-prices');
+    const res = await fetch('/functions/fuel-prices');
     if (res.ok) fuelPrices = await res.json();
   } catch(e) { console.warn('Fuel prices fallback'); }
 }
@@ -2210,7 +2210,7 @@ async function saveNotifPref(type, value) {
     registerPush();
   } else {
     // Remove subscription from Firestore
-    await fetch('/.netlify/functions/save-subscription', {
+    await fetch('/functions/save-subscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription: null, userId: currentUser })
@@ -2236,7 +2236,7 @@ async function saveNotificationForAll(type, title, body) {
 // Send push to all users with a specific pref enabled
 async function sendPushToAll(type, title, body) {
   try {
-    await fetch('/.netlify/functions/send-push-event', {
+    await fetch('/functions/send-push-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, title, body })
@@ -3241,7 +3241,7 @@ async function registerPush() {
     });
     // Save subscription to Firestore via Netlify function
     if (currentUser) {
-      await fetch('/.netlify/functions/save-subscription', {
+      await fetch('/functions/save-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: sub.toJSON(), userId: currentUser })
