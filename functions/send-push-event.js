@@ -66,39 +66,50 @@ export async function onRequestOptions() {
   });
 }
 
+async function importVapidKey(vapidPrivate) {
+  // VAPID private key is raw EC key in base64url format (32 bytes)
+  const raw = vapidPrivate.replace(/-/g, '+').replace(/_/g, '/');
+  const padding = (4 - raw.length % 4) % 4;
+  const padded = raw + '='.repeat(padding);
+  const rawBytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+
+  // Wrap raw EC key into PKCS8 format for P-256
+  const pkcs8Prefix = new Uint8Array([
+    0x30, 0x41, 0x02, 0x01, 0x00, 0x30, 0x13,
+    0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
+    0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07,
+    0x04, 0x27, 0x30, 0x25, 0x02, 0x01, 0x01, 0x04, 0x20
+  ]);
+  const pkcs8 = new Uint8Array(pkcs8Prefix.length + rawBytes.length);
+  pkcs8.set(pkcs8Prefix);
+  pkcs8.set(rawBytes, pkcs8Prefix.length);
+
+  return crypto.subtle.importKey(
+    'pkcs8', pkcs8,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false, ['sign']
+  );
+}
+
 async function sendWebPush(subscription, payload, env) {
   const vapidPublic = env.VAPID_PUBLIC_KEY;
-  const vapidPrivate = env.VAPID_PRIVATE_KEY;
   const endpoint = subscription.endpoint;
   const audience = new URL(endpoint).origin;
-
   const now = Math.floor(Date.now() / 1000);
-  const vapidHeader = btoa(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
-  const vapidPayload = btoa(JSON.stringify({ aud: audience, exp: now + 12 * 3600, sub: 'mailto:admin@urss-carpooling.app' }));
-  const signingInput = `${vapidHeader}.${vapidPayload}`;
 
-  // Import VAPID private key
-  const rawKey = vapidPrivate.replace(/-/g, '+').replace(/_/g, '/');
-  const keyBytes = Uint8Array.from(atob(rawKey), c => c.charCodeAt(0));
-  const privateKey = await crypto.subtle.importKey(
-    'raw', keyBytes, { name: 'ECDH', namedCurve: 'P-256' }, true, []
-  ).catch(async () => {
-    return crypto.subtle.importKey(
-      'pkcs8', keyBytes, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']
-    );
-  });
+  const header = btoa(JSON.stringify({ typ: 'JWT', alg: 'ES256' })).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const claims = btoa(JSON.stringify({ aud: audience, exp: now + 12*3600, sub: 'mailto:admin@urss-carpooling.app' })).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const sigInput = `${header}.${claims}`;
 
-  const encoder = new TextEncoder();
+  const privateKey = await importVapidKey(env.VAPID_PRIVATE_KEY);
   const sig = await crypto.subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },
     privateKey,
-    encoder.encode(signingInput)
+    new TextEncoder().encode(sigInput)
   );
-  const signature = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  const jwt = `${signingInput}.${signature}`;
+  const signature = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const jwt = `${sigInput}.${signature}`;
 
-  // Encrypt payload
-  const payloadStr = JSON.stringify(payload);
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -106,9 +117,12 @@ async function sendWebPush(subscription, payload, env) {
       'Content-Type': 'application/json',
       'TTL': '86400'
     },
-    body: payloadStr
+    body: JSON.stringify(payload)
   });
-  if (!res.ok && res.status !== 201) throw new Error(`Push failed: ${res.status}`);
+  if (!res.ok && res.status !== 201 && res.status !== 410) {
+    throw new Error(`Push failed: ${res.status}`);
+  }
+  return res.status;
 }
 
 async function saveNotification(token, projectId, userId, type, title, body) {
