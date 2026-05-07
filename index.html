@@ -18,6 +18,7 @@ html {
   height: 100%;
 }
 body {
+  overscroll-behavior: none;
   background: #6B1F1F;
   min-height: 100%;
 }
@@ -1210,8 +1211,11 @@ body.modal-open {
       <div class="section-label" style="margin-bottom:8px">Con che auto?</div>
       <div id="vehicleSelectorList" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden"></div>
     </div>
-    <div class="section-label" style="margin-bottom:8px">Chi c'e' in macchinata</div>
     <div class="presence-section" id="presenceList"></div>
+    <div id="presenceModalActions" style="display:none;margin-top:14px" class="form-actions">
+      <button class="btn-secondary" onclick="cancelSwap()">Annulla</button>
+      <button class="btn-primary" onclick="confirmSwap()">Conferma cambio</button>
+    </div>
   </div>
 </div>
 
@@ -2518,36 +2522,69 @@ function renderPresenceModal(ds) {
   list.innerHTML = html + (canSwapAny ? '<div style="font-size:10px;color:var(--muted);font-style:italic;padding:8px 14px 0;text-align:center">Tap sul nome per cambiare guidatore</div>' : '');
 }
 
-async function swapDriverFromPresence(ds, newDriver) {
-  if (!ds || !newDriver) return;
-  // Save exception
-  exceptions[ds] = exceptions[ds] || {};
-  const oldDriver = exceptions[ds].driver || getDriverForDate(new Date(ds + 'T00:00:00Z'));
-  exceptions[ds].driver = newDriver;
+let pendingSwapDs = null;
+let pendingSwapDriver = null;
+let originalDriver = null;
+
+function cancelSwap() {
+  if (!pendingSwapDs || !originalDriver) { closePresenceModal(); return; }
+  // Restore original driver
+  exceptions[pendingSwapDs] = exceptions[pendingSwapDs] || {};
+  exceptions[pendingSwapDs].driver = originalDriver;
+  pendingSwapDs = null;
+  pendingSwapDriver = null;
+  originalDriver = null;
+  document.getElementById('presenceModalActions').style.display = 'none';
+  renderPresenceModal(pendingSwapDs);
+  closePresenceModal();
+}
+
+async function confirmSwap() {
+  if (!pendingSwapDs || !pendingSwapDriver) { closePresenceModal(); return; }
+  const ds = pendingSwapDs;
+  const newDriver = pendingSwapDriver;
+  pendingSwapDs = null;
+  pendingSwapDriver = null;
+  originalDriver = null;
+  document.getElementById('presenceModalActions').style.display = 'none';
+  // Save to Firestore
   if (window._fsSetDoc && window._fsDoc && window._db) {
     try {
       await window._fsSetDoc(window._fsDoc(window._db, 'exceptions', ds), exceptions[ds], { merge: true });
     } catch(e) { console.warn('Swap save error', e); }
   }
-  // If current user gave away their turn, mark them absent
-  if (oldDriver === currentUser && newDriver !== currentUser) {
-    await togglePresence(ds, false);
-  }
-  renderPresenceModal(ds);
   renderHero();
   renderCalendar();
-  // Update modal title
   const d = new Date(ds + 'T00:00:00Z');
   const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
   const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  sendPushToAll('cambio', dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ': guida ' + newDriver, '');
+  closePresenceModal();
+}
+
+async function swapDriverFromPresence(ds, newDriver) {
+  if (!ds || !newDriver) return;
+  // Preview only — save to Firestore only on confirm
+  exceptions[ds] = exceptions[ds] || {};
+  if (!originalDriver) originalDriver = exceptions[ds].driver || getDriverForDate(new Date(ds + 'T00:00:00Z'));
+  exceptions[ds].driver = newDriver;
+  pendingSwapDs = ds;
+  pendingSwapDriver = newDriver;
+  // If current user gave away their turn, mark them absent locally
+  if (originalDriver === currentUser && newDriver !== currentUser) {
+    if (!presences[ds]) presences[ds] = {};
+    presences[ds][currentUser] = false;
+    window.presences = presences;
+  }
+  renderPresenceModal(ds);
+  // Update modal subtitle
   const profile = window.userProfiles[newDriver] || {};
   const veh = getActiveVehicle(profile);
   const vehStr = veh ? ' · ' + veh.brand + ' ' + veh.model : '';
   document.getElementById('presenceModalSub').textContent = 'Guida ' + newDriver + vehStr + ' · 07:45 · turno modificato';
-  // Re-render vehicle selector if newDriver is current user
   renderVehicleSelectorInModal(ds, newDriver === currentUser);
-  // Notify
-  sendPushToAll('cambio', dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ': guida ' + newDriver, '');
+  // Show action buttons
+  document.getElementById('presenceModalActions').style.display = 'flex';
 }
 
 function togglePresenceDropdown(ds) {
