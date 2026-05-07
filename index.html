@@ -2164,8 +2164,12 @@ function removeAbsence(i) {
 }
 
 function clearAbsenceForm() {
-  document.getElementById('absenceFrom').value = '';
-  document.getElementById('absenceTo').value = '';
+  const from = document.getElementById('absenceFrom');
+  const to = document.getElementById('absenceTo');
+  from.value = '';
+  to.value = '';
+  from.classList.remove('has-value');
+  to.classList.remove('has-value');
 }
 
 // ── SWAP MODAL ────────────────────────────────────────────────────────────────
