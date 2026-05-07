@@ -23,8 +23,6 @@ body {
   background: #6B1F1F;
   height: 100vh;
   overflow: hidden;
-  position: fixed;
-  width: 100%;
 }
 body::before {
   content: "";
@@ -979,7 +977,7 @@ body.modal-open {
   line-height: 1;
 }
 
-.page { display: none; padding-bottom: 80px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.page { display: none; padding-bottom: 100px; overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: calc(100vh - 120px); }
 .page.active { display: block; }
 
 /* EMPTY STATE */
