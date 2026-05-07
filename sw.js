@@ -2,13 +2,10 @@ self.addEventListener('push', function(event) {
   if (!event.data) return;
   let data;
   try { data = event.data.json(); } catch(e) { data = { title: event.data.text(), body: '' }; }
-  
-  const notifTitle = data.title || data.body || 'URSS';
-  const notifBody = data.body && data.body !== data.title ? data.body : '';
 
   event.waitUntil(
-    self.registration.showNotification(notifTitle, {
-      body: notifBody,
+    self.registration.showNotification('from URSS', {
+      body: data.title || data.body || '',
       icon: '/urss-icon.png',
       badge: '/urss-icon.png',
       vibrate: [200, 100, 200],
