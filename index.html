@@ -28,8 +28,18 @@ body::before {
   top: -1000px;
   left: 0;
   right: 0;
-  height: 2000px;
+  height: 1100px;
   background: #6B1F1F;
+  z-index: -1;
+}
+body::after {
+  content: "";
+  position: fixed;
+  bottom: -1000px;
+  left: 0;
+  right: 0;
+  height: 1100px;
+  background: var(--bg, #F2F0EB);
   z-index: -1;
 }
 </style>
