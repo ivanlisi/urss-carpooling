@@ -570,6 +570,19 @@ body {
 .form-row { margin-bottom: 12px; }
 .form-label { font-size: 11px; color: var(--muted); margin-bottom: 5px; display: block; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
 
+input[type="date"]:not(:focus):not([value]) {
+  color: var(--muted);
+}
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: var(--muted);
+}
+input[type="date"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+}
 select, input[type="date"] {
   width: 100%;
   background: var(--bg);
@@ -839,10 +852,10 @@ select, input[type="date"] {
 .notif-bell-btn { position:relative; }
 .notif-badge { position:absolute; top:-3px; right:-3px; width:16px; height:16px; background:#ea994d; border-radius:50%; border:1.5px solid #9B3A3A; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; display:none; }
 .notif-badge.visible { display:flex; }
-.notif-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity 0.3s ease; }
-.notif-overlay.open { opacity:1; pointer-events:all; }
-.notif-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%) translateY(100%); width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 -4px 32px rgba(0,0,0,0.2); height:72vh; overflow:hidden; display:flex; flex-direction:column; border-radius:16px 16px 0 0; transition:transform 0.35s cubic-bezier(0.32,0.72,0,1); }
-.notif-panel.open { transform:translateX(-50%) translateY(0); }
+.notif-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity 0.3s ease; visibility:hidden; }
+.notif-overlay.open { opacity:1; pointer-events:all; visibility:visible; }
+.notif-panel { position:fixed; bottom:0; left:50%; transform:translateX(-50%) translateY(100%); visibility:hidden; width:100%; max-width:420px; z-index:201; background:var(--card); box-shadow:0 -4px 32px rgba(0,0,0,0.2); height:72vh; overflow:hidden; display:flex; flex-direction:column; border-radius:16px 16px 0 0; transition:transform 0.35s cubic-bezier(0.32,0.72,0,1); }
+.notif-panel.open { transform:translateX(-50%) translateY(0); visibility:visible; }
 .notif-handle { width:36px; height:4px; background:var(--border); border-radius:2px; margin:10px auto 6px; flex-shrink:0; }
 .notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 12px; border-bottom:0.5px solid var(--border); flex-shrink:0; background:var(--card); }
 .notif-scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
@@ -1025,7 +1038,7 @@ select, input[type="date"] {
     </div>
     <div class="cal-grid" id="calGrid"></div>
 
-    <div class="section-label" style="margin-top:16px">Pianifica assenza continuativa</div>
+    <div class="section-label" style="margin-top:28px">Pianifica assenza continuativa</div>
     <div id="absenceList"></div>
 
     <div class="form-card">
@@ -1041,11 +1054,11 @@ select, input[type="date"] {
       </div>
       <div class="form-row">
         <label class="form-label">Dal</label>
-        <input type="date" id="absenceFrom">
+        <input type="date" id="absenceFrom" placeholder="gg/mm/aaaa">
       </div>
       <div class="form-row">
         <label class="form-label">Al</label>
-        <input type="date" id="absenceTo">
+        <input type="date" id="absenceTo" placeholder="gg/mm/aaaa">
       </div>
       <div class="form-actions">
         <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
