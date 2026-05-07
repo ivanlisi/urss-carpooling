@@ -113,8 +113,15 @@ body::before {
     onSnapshot(collection(db, 'absences'), (snap) => {
       const loaded = [];
       snap.forEach(d => loaded.push(d.data()));
-      window.absences = loaded;
-      absences = loaded;
+      // Safety: if local has data but snapshot is empty, ignore (might be transient)
+      if (loaded.length === 0 && absences.length > 0 && !snap.metadata.fromCache) {
+        // Firestore confirms it's empty - safe to clear
+        window.absences = [];
+        absences = [];
+      } else {
+        window.absences = loaded;
+        absences = loaded;
+      }
       if (typeof renderAbsences === 'function') {
         renderAbsences();
         renderTurnList();
@@ -622,12 +629,20 @@ select, input[type="date"] {
   padding: 20px;
   width: 100%;
   max-width: 420px;
-  animation: slideUp 0.25s ease;
+  animation: slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
+  max-height: 85vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 @keyframes slideUp {
-  from { transform: translateY(40px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-handle {
+  cursor: grab;
+  touch-action: none;
 }
 
 .modal-handle {
@@ -979,7 +994,6 @@ select, input[type="date"] {
   </div>
   <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('turni', this)">Turni</button>
-    <button class="tab-btn" onclick="switchTab('calendario', this)">Calendario</button>
     <button class="tab-btn" onclick="switchTab('statistiche', this)">Statistiche</button>
     <button class="tab-btn" id="tabProfilo" onclick="switchTab('profilo', this)">Profilo</button>
   </div>
@@ -999,11 +1013,6 @@ select, input[type="date"] {
 
   <!-- TURNI PAGE -->
   <div id="page-turni" class="page active">
-    <div id="turnList"></div>
-  </div>
-
-  <!-- CALENDARIO PAGE -->
-  <div id="page-calendario" class="page">
     <div class="cal-nav">
       <button class="cal-nav-btn" onclick="changeMonth(-1)">‹</button>
       <div class="cal-month" id="calMonthLabel"></div>
@@ -2423,18 +2432,38 @@ function renderPresenceModal(ds) {
   const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
   const todayStr = italianNow.toISOString().slice(0,10);
   const isPast = ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 45)));
+
+  const d = new Date(ds + 'T00:00:00Z');
+  const currentDriver = getEffectiveDriver(d);
+  const baseDriver = getDriverForDate(d);
+  const isModified = exceptions[ds] && exceptions[ds].driver && exceptions[ds].driver !== baseDriver;
+
   let html = '';
   DRIVERS.forEach(function(name) {
     const col = getUserColor(name);
     const absent = isAbsentForDay(ds, name);
     const isMe = name === currentUser;
+    const isDriver = name === currentDriver;
+    const avStyle = (isDriver && isModified)
+      ? 'background:repeating-linear-gradient(45deg,' + col.fg + '88 0px,' + col.fg + '88 3px,' + col.fg + ' 3px,' + col.fg + ' 6px);color:white'
+      : 'background:' + col.bg + ';color:' + col.fg;
+    const driverBadge = isDriver ? ' <span style="font-size:9px;background:#9B3A3A;color:white;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500">GUIDA</span>' : '';
+    const meTxt = isMe ? ' <span style="font-size:10px;color:var(--muted)">(tu)</span>' : '';
+
+    // Click on user row swaps driver (unless past departure or already the driver)
+    const canSwap = !isPast && !isDriver;
+    const userClick = canSwap ? ' onclick="swapDriverFromPresence(&quot;' + ds + '&quot;,&quot;' + name + '&quot;)" style="cursor:pointer"' : '';
+
+    html += '<div class="presence-row' + (isMe ? ' me-row' : '') + '">';
+    html += '<div class="presence-user"' + userClick + '>';
+    html += '<div class="presence-av" style="' + avStyle + '">' + name[0] + '</div>';
+    html += '<div class="presence-name">' + name + meTxt + driverBadge + '</div>';
+    html += '</div>';
+
     if (isMe) {
       const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
       const badgeTxt = absent ? 'non ci sono' : 'ci sono';
-      html += '<div class="presence-row me-row"><div class="presence-user">';
-      html += '<div class="presence-av" style="background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
-      html += '<div class="presence-name">' + name + ' <span style="font-size:10px;color:var(--muted)">(tu)</span></div>';
-      html += '</div><div style="position:relative">';
+      html += '<div style="position:relative">';
       if (isPast) {
         html += '<div class="' + badgeCls + '" style="opacity:0.5;cursor:default">' + badgeTxt + '</div>';
       } else {
@@ -2446,17 +2475,45 @@ function renderPresenceModal(ds) {
         html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence(&quot;' + ds + '&quot;, false)">Non ci sono</div>';
         html += '</div>';
       }
-      html += '</div></div>';
+      html += '</div>';
     } else {
       const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
       const badgeTxt2 = absent ? 'non ci sara' : 'presente';
-      html += '<div class="presence-row"><div class="presence-user">';
-      html += '<div class="presence-av" style="background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
-      html += '<div class="presence-name">' + name + '</div></div>';
-      html += '<span class="' + badgeCls2 + '">' + badgeTxt2 + '</span></div>';
+      html += '<span class="' + badgeCls2 + '">' + badgeTxt2 + '</span>';
     }
+    html += '</div>';
   });
-  list.innerHTML = html;
+
+  // Help text if can swap
+  const canSwapAny = !isPast;
+  list.innerHTML = html + (canSwapAny ? '<div style="font-size:10px;color:var(--muted);font-style:italic;padding:8px 14px 0;text-align:center">Tap sul nome per cambiare guidatore</div>' : '');
+}
+
+async function swapDriverFromPresence(ds, newDriver) {
+  if (!ds || !newDriver) return;
+  // Save exception
+  exceptions[ds] = exceptions[ds] || {};
+  exceptions[ds].driver = newDriver;
+  if (window._fsSetDoc && window._fsDoc && window._db) {
+    try {
+      await window._fsSetDoc(window._fsDoc(window._db, 'exceptions', ds), exceptions[ds], { merge: true });
+    } catch(e) { console.warn('Swap save error', e); }
+  }
+  renderPresenceModal(ds);
+  renderHero();
+  renderCalendar();
+  // Update modal title
+  const d = new Date(ds + 'T00:00:00Z');
+  const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const profile = window.userProfiles[newDriver] || {};
+  const veh = getActiveVehicle(profile);
+  const vehStr = veh ? ' · ' + veh.brand + ' ' + veh.model : '';
+  document.getElementById('presenceModalSub').textContent = 'Guida ' + newDriver + vehStr + ' · 07:45 · turno modificato';
+  // Re-render vehicle selector if newDriver is current user
+  renderVehicleSelectorInModal(ds, newDriver === currentUser);
+  // Notify
+  sendPushToAll('cambio', 'Turno modificato', dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ' guida ' + newDriver);
 }
 
 function togglePresenceDropdown(ds) {
