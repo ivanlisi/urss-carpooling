@@ -1067,11 +1067,11 @@ body.modal-open {
       </div>
       <div class="form-row">
         <label class="form-label">Dal</label>
-        <input type="date" id="absenceFrom" placeholder="gg/mm/aaaa" onchange="this.style.color=this.value?'var(--text)':''">
+        <input type="text" id="absenceFrom" placeholder="gg/mm/aaaa" inputmode="numeric" oninput="autoFormatDate(this)">
       </div>
       <div class="form-row">
         <label class="form-label">Al</label>
-        <input type="date" id="absenceTo" placeholder="gg/mm/aaaa" onchange="this.style.color=this.value?'var(--text)':''">
+        <input type="text" id="absenceTo" placeholder="gg/mm/aaaa" inputmode="numeric" oninput="autoFormatDate(this)">
       </div>
       <div class="form-actions">
         <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
