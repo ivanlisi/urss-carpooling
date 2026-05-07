@@ -572,16 +572,25 @@ body {
 .form-row { margin-bottom: 12px; }
 .form-label { font-size: 11px; color: var(--muted); margin-bottom: 5px; display: block; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
 
+/* iOS placeholder workaround for date inputs */
 input[type="date"] {
-  color: var(--muted);
+  position: relative;
 }
-input[type="date"]::-webkit-datetime-edit-text,
-input[type="date"]::-webkit-datetime-edit-month-field,
-input[type="date"]::-webkit-datetime-edit-day-field,
-input[type="date"]::-webkit-datetime-edit-year-field {
+input[type="date"]:not(.has-value)::before {
+  content: attr(placeholder);
   color: var(--muted);
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
 }
-input[type="date"]:valid {
+input[type="date"]:not(.has-value)::-webkit-datetime-edit {
+  color: transparent;
+}
+input[type="date"].has-value::-webkit-datetime-edit {
   color: var(--text);
 }
 input[type="date"]::-webkit-inner-spin-button,
@@ -1067,11 +1076,11 @@ body.modal-open {
       </div>
       <div class="form-row">
         <label class="form-label">Dal</label>
-        <input type="date" id="absenceFrom">
+        <input type="date" id="absenceFrom" placeholder="gg/mm/aaaa" oninput="this.classList.toggle('has-value', !!this.value)" onchange="this.classList.toggle('has-value', !!this.value)">
       </div>
       <div class="form-row">
         <label class="form-label">Al</label>
-        <input type="date" id="absenceTo">
+        <input type="date" id="absenceTo" placeholder="gg/mm/aaaa" oninput="this.classList.toggle('has-value', !!this.value)" onchange="this.classList.toggle('has-value', !!this.value)">
       </div>
       <div class="form-actions">
         <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
