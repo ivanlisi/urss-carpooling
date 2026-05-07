@@ -401,10 +401,11 @@ body {
   background: repeating-linear-gradient(
     45deg,
     var(--band-color) 0px,
-    var(--band-color) 3px,
-    var(--band-dark) 3px,
-    var(--band-dark) 6px
+    var(--band-color) 5px,
+    color-mix(in srgb, var(--band-color) 70%, var(--band-dark)) 5px,
+    color-mix(in srgb, var(--band-color) 70%, var(--band-dark)) 9px
   ) !important;
+  text-shadow: 0 0 4px rgba(255,255,255,0.8), 0 0 2px rgba(255,255,255,0.9);
 }
 .cal-day.empty { cursor: default; background: none !important; }
 .cal-day.empty .day-num { color: var(--border); }
