@@ -21,8 +21,7 @@ html {
 body {
   overscroll-behavior: none;
   background: #6B1F1F;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100%;
 }
 body::before {
   content: "";
@@ -977,7 +976,7 @@ body.modal-open {
   line-height: 1;
 }
 
-.page { display: none; padding-bottom: 100px; overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: calc(100vh - 120px); }
+.page { display: none; padding-bottom: 100px; }
 .page.active { display: block; }
 
 /* EMPTY STATE */
@@ -1215,8 +1214,7 @@ body.modal-open {
       <div id="vehicleSelectorList" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden"></div>
     </div>
     <div class="presence-section" id="presenceList"></div>
-    <div style="height:0.5px;background:var(--border);margin:12px 0"></div>
-    <div class="form-actions">
+    <div class="form-actions" style="margin-top:10px">
       <button class="btn-secondary" onclick="cancelSwapOrClose()">Annulla</button>
       <button class="btn-primary" id="presenceConfirmBtn" onclick="confirmSwap()" style="opacity:0.4;pointer-events:none">Conferma</button>
     </div>
