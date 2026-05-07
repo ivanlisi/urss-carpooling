@@ -19,7 +19,7 @@ html {
 }
 body {
   overscroll-behavior-y: none;
-  background: #6B1F1F;
+  background: var(--bg, #F2F0EB);
   min-height: 100%;
 }
 body::before {
@@ -28,18 +28,8 @@ body::before {
   top: -1000px;
   left: 0;
   right: 0;
-  height: 1160px;
+  height: 2000px;
   background: #6B1F1F;
-  z-index: -1;
-}
-body::after {
-  content: "";
-  position: fixed;
-  bottom: -1000px;
-  left: 0;
-  right: 0;
-  height: 1100px;
-  background: var(--bg, #F2F0EB);
   z-index: -1;
 }
 </style>
@@ -189,7 +179,7 @@ body::after {
 
 body {
   font-family: 'Inter', sans-serif;
-  background: #6B1F1F;
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
   max-width: 420px;
@@ -613,7 +603,7 @@ select, input[type="date"] {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 14px 12px;
-  height: 43px;
+  height: 52px;
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   color: var(--text);
@@ -998,7 +988,7 @@ body.modal-open {
   line-height: 1;
 }
 
-.page { display: none; padding-bottom: 32px; overscroll-behavior-y: none; background: var(--bg); }
+.page { display: none; padding-bottom: 100px; }
 .page.active { display: block; }
 
 /* EMPTY STATE */
@@ -1101,7 +1091,7 @@ body.modal-open {
   </div>
 
   <!-- STATISTICHE PAGE -->
-  <div id="page-statistiche" class="page" style="padding-bottom:32px">
+  <div id="page-statistiche" class="page" style="padding-bottom:80px">
     <div class="content">
     <div class="section-label">Turni effettuati</div>
     <div class="stats-grid" id="statsGrid"></div>
@@ -1111,7 +1101,7 @@ body.modal-open {
   </div>
 
   <!-- PROFILE PAGE -->
-  <div id="page-profilo" class="page" style="padding-bottom:32px">
+  <div id="page-profilo" class="page" style="padding-bottom:80px">
     <div id="profileContent"></div>
   </div>
 
