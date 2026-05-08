@@ -1094,6 +1094,8 @@ body.modal-open {
         <input type="date" id="absenceTo" placeholder="gg/mm/aaaa" oninput="this.classList.toggle('has-value', !!this.value)" onchange="this.classList.toggle('has-value', !!this.value)">
       </div>
       <div class="form-actions">
+        <div style="height:0.5px;background:var(--border);margin:20px 0 0"></div>
+        <div class="form-actions">
         <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
         <button class="btn-primary" onclick="addAbsence()">Salva assenza</button>
       </div>
