@@ -690,6 +690,8 @@ body.modal-open {
   overflow: hidden;
   position: fixed;
   width: 100%;
+  left: 0;
+  right: 0;
 }
 
 .modal-handle {
@@ -2206,7 +2208,7 @@ function openSwapModal(ds, driver, dayNum, dayName, monthName) {
       </div>`;
   });
   document.getElementById('modalPickups').innerHTML = html;
-  document.getElementById('swapModal').classList.add('open');
+  document.getElementById('swapModal').classList.add('open'); updateBodyLock();
 }
 
 function selectDriver(name, ds) {
@@ -2240,7 +2242,7 @@ function saveSwap() {
 }
 
 function closeSwapModal() {
-  document.getElementById('swapModal').classList.remove('open');
+  document.getElementById('swapModal').classList.remove('open'); updateBodyLock();
   currentSwapDate = null;
 }
 
@@ -2263,11 +2265,11 @@ function handleTitleTap() {
 }
 
 function openSecretModal() {
-  document.getElementById('secretModal').classList.add('open');
+  document.getElementById('secretModal').classList.add('open'); updateBodyLock();
 }
 
 function closeSecretModal() {
-  document.getElementById('secretModal').classList.remove('open');
+  document.getElementById('secretModal').classList.remove('open'); updateBodyLock();
 }
 
 // ── NOTIFICATION PREFS ────────────────────────────────────────────────────────
@@ -2422,11 +2424,11 @@ function openPresenceModal(ds) {
   // Show vehicle selector only if current user is the driver
   const isDriver = driver === currentUser;
   renderVehicleSelectorInModal(ds, isDriver);
-  document.getElementById('presenceModal').classList.add('open');
+  document.getElementById('presenceModal').classList.add('open'); updateBodyLock();
 }
 
 function closePresenceModal() {
-  document.getElementById('presenceModal').classList.remove('open');
+  document.getElementById('presenceModal').classList.remove('open'); updateBodyLock();
   document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
 }
 
@@ -2874,7 +2876,7 @@ function openVehicleModal(editIdx) {
     document.getElementById('vConsumption').value = '';
     document.getElementById('vFuelInfo').style.display = 'none';
   }
-  document.getElementById('vehicleModal').classList.add('open');
+  document.getElementById('vehicleModal').classList.add('open'); updateBodyLock();
 }
 
 function editVehicle(idx) {
@@ -2927,7 +2929,7 @@ function onEngineChange() {
 }
 
 function closeVehicleModal() {
-  document.getElementById('vehicleModal').classList.remove('open');
+  document.getElementById('vehicleModal').classList.remove('open'); updateBodyLock();
 }
 
 async function saveVehicle() {
@@ -2985,7 +2987,7 @@ function openChangeVehicleModal() {
         ? `<div class="vehicle-check"><svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>`
         : `<div class="vehicle-check-empty" id="cvCheck_${i}"></div>`}
     </div>`).join('');
-  document.getElementById('changeVehicleModal').classList.add('open');
+  document.getElementById('changeVehicleModal').classList.add('open'); updateBodyLock();
 }
 
 function selectTempVehicle(idx) {
@@ -2996,7 +2998,7 @@ function selectTempVehicle(idx) {
 }
 
 function closeChangeVehicleModal() {
-  document.getElementById('changeVehicleModal').classList.remove('open');
+  document.getElementById('changeVehicleModal').classList.remove('open'); updateBodyLock();
 }
 
 async function confirmVehicleChange() {
@@ -3169,7 +3171,7 @@ function openColorModalForNewUser() {
   const profile = window.userProfiles[pendingUser] || {};
   selectedColorId = profile.colorId || null;
   renderColorPicker();
-  document.getElementById('colorModal').classList.add('open');
+  document.getElementById('colorModal').classList.add('open'); updateBodyLock();
 }
 
 function openColorModal() {
@@ -3177,7 +3179,7 @@ function openColorModal() {
   const profile = window.userProfiles[currentUser] || {};
   selectedColorId = profile.colorId || null;
   renderColorPicker();
-  document.getElementById('colorModal').classList.add('open');
+  document.getElementById('colorModal').classList.add('open'); updateBodyLock();
 }
 
 function renderColorPicker() {
@@ -3224,7 +3226,7 @@ async function saveColor() {
 }
 
 function closeColorModal() {
-  document.getElementById('colorModal').classList.remove('open');
+  document.getElementById('colorModal').classList.remove('open'); updateBodyLock();
 }
 
 // ── CHANGE PIN ────────────────────────────────────────────────────────────────
@@ -3232,11 +3234,11 @@ function openChangePinModal() {
   document.getElementById('oldPin').value = '';
   document.getElementById('newPin').value = '';
   document.getElementById('changePinError').textContent = '';
-  document.getElementById('changePinModal').classList.add('open');
+  document.getElementById('changePinModal').classList.add('open'); updateBodyLock();
 }
 
 function closeChangePinModal() {
-  document.getElementById('changePinModal').classList.remove('open');
+  document.getElementById('changePinModal').classList.remove('open'); updateBodyLock();
 }
 
 async function confirmChangePin() {
@@ -3261,11 +3263,11 @@ async function confirmChangePin() {
 function openChangeNameModal() {
   const profile = window.userProfiles[currentUser] || {};
   document.getElementById('newDisplayName').value = profile.name || currentUser;
-  document.getElementById('changeNameModal').classList.add('open');
+  document.getElementById('changeNameModal').classList.add('open'); updateBodyLock();
 }
 
 function closeChangeNameModal() {
-  document.getElementById('changeNameModal').classList.remove('open');
+  document.getElementById('changeNameModal').classList.remove('open'); updateBodyLock();
 }
 
 async function confirmChangeName() {
@@ -3447,6 +3449,22 @@ async function registerPush() {
 </script>
 
 <script>
+// Scroll lock - Instagram style
+var _scrollY = 0;
+function updateBodyLock() {
+  var anyOpen = document.querySelector('.modal-overlay.open') || 
+                (document.getElementById('notifPanel') && document.getElementById('notifPanel').classList.contains('open'));
+  if (anyOpen) {
+    _scrollY = window.scrollY;
+    document.body.style.top = '-' + _scrollY + 'px';
+    document.body.classList.add('modal-open');
+  } else {
+    document.body.classList.remove('modal-open');
+    document.body.style.top = '';
+    window.scrollTo(0, _scrollY);
+  }
+}
+
 // Swipe down to close any bottom sheet
 (function() {
   var startY = 0;
