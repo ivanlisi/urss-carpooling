@@ -603,7 +603,7 @@ select, input[type="date"] {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 14px 12px;
-  height: 52px;
+  height: 43px;
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   color: var(--text);
@@ -1083,7 +1083,7 @@ body.modal-open {
         <label class="form-label">Al</label>
         <input type="date" id="absenceTo" placeholder="gg/mm/aaaa" oninput="this.classList.toggle('has-value', !!this.value)" onchange="this.classList.toggle('has-value', !!this.value)">
       </div>
-      <div style="height:0.5px;background:var(--border);margin:20px -16px 0"></div>
+      <div style="height:0.5px;background:var(--border);margin:20px 0 0"></div>
       <div class="form-actions" style="margin-top:16px">
         <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
         <button class="btn-primary" onclick="addAbsence()">Salva assenza</button>
