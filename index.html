@@ -1079,8 +1079,8 @@ body.modal-open {
     <div class="form-card">
       <div class="form-title">Aggiungi assenza</div>
       <div class="form-row">
-        <label class="form-label">Persona</label>
-        <select id="absencePerson">
+        <label class="form-label" id="absencePersonLabel">Compagno</label>
+        <select id="absencePerson" onchange="updateAbsenceGender(this.value)">
           <option value="Ivan">Ivan</option>
           <option value="Ilaria">Ilaria</option>
           <option value="Dervis">Dervis</option>
@@ -2205,6 +2205,12 @@ function removeAbsence(i) {
   renderTurnList();
   renderHero();
   renderCalendar();
+}
+
+function updateAbsenceGender(person) {
+  const lbl = document.getElementById('absencePersonLabel');
+  if (!lbl) return;
+  lbl.textContent = person === 'Ilaria' ? 'Compagna' : 'Compagno';
 }
 
 function clearAbsenceForm() {
