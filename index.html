@@ -1128,12 +1128,43 @@ body.modal-open {
     <div class="modal-sub" style="margin-top:6px;font-size:13px;color:var(--muted)">Accesso riservato al Comitato Centrale</div>
     <div style="margin-top:20px">
       <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px">
-        <div style="font-size:13px;color:var(--muted)">Azzera tutti i contatori a zero. L'operazione non può essere annullata.</div>
+        <div style="font-size:13px;color:var(--muted)">Azzera tutti i contatori. L'operazione non può essere annullata.</div>
       </div>
       <div class="form-actions">
         <button class="btn-secondary" onclick="closeSecretModal()">Annulla</button>
-        <button class="btn-primary" onclick="confirmReset()">Azzera statistiche</button>
+        <button class="btn-primary" onclick="confirmResetStats()">Azzera statistiche</button>
       </div>
+
+      <div style="height:1px;background:#C8C5BE;margin:20px 0"></div>
+
+      <div class="section-label" style="margin-bottom:10px">Reset PIN utente</div>
+      <div id="adminPinList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM RESET STATS POPUP -->
+<div class="modal-overlay" id="confirmStatsModal" onclick="if(event.target===this)closeConfirmStats()">
+  <div class="modal-sheet">
+    <div class="modal-handle" onclick="closeConfirmStats()" style="cursor:pointer"></div>
+    <div class="modal-title" style="font-size:15px">Azzera statistiche?</div>
+    <div style="font-size:13px;color:var(--muted);margin:8px 0 20px">Azzera tutti i contatori. L'operazione non può essere annullata.</div>
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeConfirmStats()">Annulla</button>
+      <button class="btn-primary" onclick="confirmReset()">Conferma</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM RESET PIN POPUP -->
+<div class="modal-overlay" id="confirmPinModal" onclick="if(event.target===this)closeConfirmPin()">
+  <div class="modal-sheet">
+    <div class="modal-handle" onclick="closeConfirmPin()" style="cursor:pointer"></div>
+    <div class="modal-title" style="font-size:15px" id="confirmPinTitle">Reset PIN</div>
+    <div style="font-size:13px;color:var(--muted);margin:8px 0 20px">Il PIN verrà resettato a 0000.</div>
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeConfirmPin()">Annulla</button>
+      <button class="btn-primary" onclick="doResetPin()">Conferma reset</button>
     </div>
   </div>
 </div>
@@ -2266,10 +2297,55 @@ function handleTitleTap() {
 
 function openSecretModal() {
   document.getElementById('secretModal').classList.add('open'); updateBodyLock();
+  renderAdminPinList();
 }
 
 function closeSecretModal() {
   document.getElementById('secretModal').classList.remove('open'); updateBodyLock();
+  renderAdminPinList();
+}
+
+function confirmResetStats() {
+  document.getElementById('confirmStatsModal').classList.add('open'); updateBodyLock();
+}
+function closeConfirmStats() {
+  document.getElementById('confirmStatsModal').classList.remove('open'); updateBodyLock();
+}
+
+let _pinResetTarget = null;
+function resetPinFor(name) {
+  _pinResetTarget = name;
+  document.getElementById('confirmPinTitle').textContent = 'Reset PIN di ' + name;
+  document.getElementById('confirmPinModal').classList.add('open'); updateBodyLock();
+}
+function closeConfirmPin() {
+  document.getElementById('confirmPinModal').classList.remove('open'); updateBodyLock();
+  _pinResetTarget = null;
+}
+async function doResetPin() {
+  if (!_pinResetTarget) return;
+  const name = _pinResetTarget;
+  closeConfirmPin();
+  if (window._fsSetDoc && window._fsDoc && window._db) {
+    try {
+      await window._fsSetDoc(window._fsDoc(window._db, 'profiles', name), { pin: '0000' }, { merge: true });
+    } catch(e) { console.warn('Reset PIN error', e); }
+  }
+}
+
+function renderAdminPinList() {
+  const list = document.getElementById('adminPinList');
+  if (!list) return;
+  let html = '';
+  DRIVERS.forEach(function(name) {
+    const col = getUserColor(name);
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px">';
+    html += '<div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
+    html += '<div style="font-size:13px;flex:1">' + name + '</div>';
+    html += '<button onclick="resetPinFor(\'' + name + '\')" style="font-size:11px;font-weight:500;color:var(--red);background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer">Reset PIN</button>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
 }
 
 // ── NOTIFICATION PREFS ────────────────────────────────────────────────────────
