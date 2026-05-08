@@ -111,6 +111,9 @@ body::after {
   // Load absences from Firestore
   window._loadPresencesRT = async function() {
     onSnapshot(collection(db, "presences"), (snap) => {
+      // Reset completely on each update so deleted presences don't linger
+      window.presences = {};
+      presences = {};
       snap.forEach(doc => {
         presences[doc.id] = doc.data();
         window.presences[doc.id] = doc.data();
@@ -892,7 +895,7 @@ body.modal-open {
 
 /* NOTIFICATIONS */
 .notif-bell-btn { position:relative; }
-.notif-badge { position:absolute; top:-3px; right:-3px; width:16px; height:16px; background:#ea994d; border-radius:50%; border:1.5px solid #9B3A3A; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; display:none; }
+.notif-badge { position:absolute; top:-3px; right:-3px; width:16px; height:16px; background:#ea994d; border-radius:50%; border:1.5px solid #9B3A3A; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; display:none; }
 .notif-badge.visible { display:flex; }
 .notif-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity 0.3s ease; visibility:hidden; }
 .notif-overlay.open { opacity:1; pointer-events:all; visibility:visible; }
@@ -913,7 +916,21 @@ body.modal-open {
 .notif-unread-dot { width:6px; height:6px; background:#ea994d; border-radius:50%; flex-shrink:0; margin-top:5px; }
 .notif-empty { padding:32px 16px; text-align:center; color:var(--muted); font-size:13px; }
 
-/* TOGGLE */
+/* TOAST */
+#toastContainer {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  pointer-events: none; width: 100%; max-width: 380px; padding: 0 16px;
+}
+.toast {
+  background: #1A1A18; color: white; font-size: 13px; font-family: 'Inter', sans-serif;
+  padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  text-align: center; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { background: #8B3A3A; }
 .toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-slider {
@@ -969,43 +986,6 @@ body.modal-open {
 .color-label { font-size: 10px; color: var(--muted); text-align: center; font-style: italic; line-height: 1.3; }
 .color-label.taken { color: var(--border); }
 
-/* BOTTOM NAV */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 420px;
-  background: var(--card);
-  border-top: 1px solid var(--border);
-  display: flex;
-  padding: 8px 0 20px;
-  z-index: 100;
-}
-
-.nav-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 0;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 10px;
-  font-family: 'Inter', sans-serif;
-  border: none;
-  background: none;
-  transition: color 0.15s;
-}
-
-.nav-item.active { color: #9B3A3A; }
-
-.nav-icon {
-  font-size: 20px;
-  line-height: 1;
-}
 
 .page { display: none; padding-bottom: 100px; }
 .page.active { display: block; }
@@ -1030,6 +1010,21 @@ body.modal-open {
 </style>
 </head>
 <body>
+
+<div id="toastContainer"></div>
+
+<!-- GENERIC CONFIRM MODAL -->
+<div class="modal-overlay" id="genericConfirmModal" onclick="if(event.target===this)_confirmReject()">
+  <div class="modal-sheet">
+    <div class="modal-handle" onclick="_confirmReject()" style="cursor:pointer"></div>
+    <div class="modal-title" id="genericConfirmTitle" style="font-size:15px"></div>
+    <div style="font-size:13px;color:var(--muted);margin:8px 0 20px" id="genericConfirmMsg"></div>
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="_confirmReject()">Annulla</button>
+      <button class="btn-primary" id="genericConfirmOkBtn" onclick="_confirmAccept()">Conferma</button>
+    </div>
+  </div>
+</div>
 
 <div id="splashOverlay"><div class="splash-title">URSS</div><div class="splash-sub">Carpooling · Viserba → Cesena</div></div>
 
@@ -1102,7 +1097,7 @@ body.modal-open {
         <label class="form-label">Al</label>
         <input type="date" id="absenceTo" placeholder="gg/mm/aaaa" oninput="this.classList.toggle('has-value', !!this.value)" onchange="this.classList.toggle('has-value', !!this.value)">
       </div>
-      <div style="height:1px;background:#C8C5BE;margin:20px 0 0"></div>
+      <div style="height:1px;background:var(--border);margin:20px 0 0"></div>
       <div class="form-actions" style="margin-top:16px">
         <button class="btn-secondary" onclick="clearAbsenceForm()">Annulla</button>
         <button class="btn-primary" onclick="addAbsence()">Salva assenza</button>
@@ -1112,12 +1107,9 @@ body.modal-open {
 
   <!-- STATISTICHE PAGE -->
   <div id="page-statistiche" class="page" style="padding-bottom:80px">
-    <div class="content">
     <div class="section-label">Turni effettuati</div>
     <div class="stats-grid" id="statsGrid"></div>
     <div id="savingsSection" style="margin-top:8px"></div>
-    </div>
-
   </div>
 
   <!-- PROFILE PAGE -->
@@ -1142,7 +1134,7 @@ body.modal-open {
         <button class="btn-primary" onclick="confirmResetStats()">Azzera statistiche</button>
       </div>
 
-      <div style="height:1px;background:#C8C5BE;margin:20px 0"></div>
+      <div style="height:1px;background:var(--border);margin:20px 0"></div>
 
       <div class="section-label" style="margin-bottom:10px">Reset PIN utente</div>
       <div id="adminPinList"></div>
@@ -1359,6 +1351,37 @@ body.modal-open {
 </div>
 
 <script>
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'error' ? ' error' : '');
+  el.textContent = msg;
+  container.appendChild(el);
+  requestAnimationFrame(() => { requestAnimationFrame(() => { el.classList.add('show'); }); });
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 250);
+  }, 2800);
+}
+
+// ── GENERIC CONFIRM ────────────────────────────────────────────────────────────
+let _confirmAccept = null;
+let _confirmReject = null;
+function showConfirm(title, msg, okLabel) {
+  return new Promise(resolve => {
+    document.getElementById('genericConfirmTitle').textContent = title;
+    document.getElementById('genericConfirmMsg').textContent = msg;
+    if (okLabel) document.getElementById('genericConfirmOkBtn').textContent = okLabel;
+    document.getElementById('genericConfirmModal').classList.add('open'); updateBodyLock();
+    _confirmAccept = () => { _closeConfirmModal(); resolve(true); };
+    _confirmReject = () => { _closeConfirmModal(); resolve(false); };
+  });
+}
+function _closeConfirmModal() {
+  document.getElementById('genericConfirmModal').classList.remove('open'); updateBodyLock();
+}
+
 // ── DATA ──────────────────────────────────────────────────────────────────────
 
 const DRIVERS = ['Filippo','Dervis','Ivan','Ilaria'];
@@ -1389,13 +1412,22 @@ function getPaletteColor(id) {
   return PALETTE.find(p => p.id === id) || PALETTE[0];
 }
 
+// Cache invalidated when profiles change
+let _colorCache = {};
+function invalidateColorCache() { _colorCache = {}; }
+
 function getUserColor(name) {
+  if (_colorCache[name]) return _colorCache[name];
   const profile = window.userProfiles && window.userProfiles[name];
+  let result;
   if (profile && profile.colorId) {
     const p = getPaletteColor(profile.colorId);
-    return { bg: p.hex + '33', mid: p.hex + '88', fg: p.dark, hex: p.hex };
+    result = { bg: p.hex + '33', mid: p.hex + '88', fg: p.dark, hex: p.hex };
+  } else {
+    result = COLORS[name] || COLORS['Ivan'];
   }
-  return COLORS[name] || COLORS['Ivan'];
+  _colorCache[name] = result;
+  return result;
 }
 
 // ── AUTH STATE ────────────────────────────────────────────────────────────────
@@ -1465,251 +1497,15 @@ const ANCHOR_DRIVER_IDX = 0; // Filippo
 
 // Store exceptions & absences in memory (would be localStorage in production)
 
-// ── CAR DATABASE ──────────────────────────────────────────────────────────────
-const CAR_DATABASE = {
-  "Alfa Romeo": {
-    "147": [{ engine: "1.6 TS Benzina 105cv", fuel: "benzina", wltp: 7.8 },{ engine: "1.9 JTD Diesel 115cv", fuel: "diesel", wltp: 5.8 }],
-    "156": [{ engine: "1.8 TS Benzina 140cv", fuel: "benzina", wltp: 8.2 },{ engine: "1.9 JTD Diesel 115cv", fuel: "diesel", wltp: 6.0 }],
-    "159": [{ engine: "1.8 Benzina 140cv", fuel: "benzina", wltp: 8.5 },{ engine: "1.9 JTDm Diesel 150cv", fuel: "diesel", wltp: 6.2 }],
-    "Giulietta": [{ engine: "1.4 TB Benzina 120cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.4 TB GPL 120cv", fuel: "gpl", wltp: 8.0 },{ engine: "1.6 JTDm Diesel 105cv", fuel: "diesel", wltp: 5.2 },{ engine: "2.0 JTDm Diesel 170cv", fuel: "diesel", wltp: 5.8 }],
-    "Giulia": [{ engine: "2.0 Turbo Benzina 200cv", fuel: "benzina", wltp: 6.8 },{ engine: "2.2 Diesel 160cv", fuel: "diesel", wltp: 5.1 }],
-    "Mito": [{ engine: "1.4 TB Benzina 105cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.4 GPL 78cv", fuel: "gpl", wltp: 7.5 },{ engine: "1.3 JTDm Diesel 85cv", fuel: "diesel", wltp: 4.8 }],
-    "Stelvio": [{ engine: "2.0 Turbo Benzina 200cv", fuel: "benzina", wltp: 7.4 },{ engine: "2.2 Diesel 160cv", fuel: "diesel", wltp: 5.5 }],
-    "Tonale": [{ engine: "1.5 MHEV Benzina 130cv", fuel: "benzina", wltp: 5.9 },{ engine: "1.3 PHEV 190cv", fuel: "ibrido_plug", wltp: 1.9 }]
-  },
-  "Audi": {
-    "A1": [{ engine: "1.0 TFSI Benzina 95cv", fuel: "benzina", wltp: 5.2 },{ engine: "1.4 TFSI Benzina 125cv", fuel: "benzina", wltp: 5.8 }],
-    "A3": [{ engine: "1.2 TFSI Benzina 105cv", fuel: "benzina", wltp: 5.7 },{ engine: "1.4 TFSI Benzina 125cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 TFSI Benzina 150cv", fuel: "benzina", wltp: 5.8 },{ engine: "2.0 TDI Diesel 116cv", fuel: "diesel", wltp: 4.3 },{ engine: "1.4 TFSI e PHEV 204cv", fuel: "ibrido_plug", wltp: 1.4 }],
-    "A4": [{ engine: "1.8 TFSI Benzina 170cv", fuel: "benzina", wltp: 7.2 },{ engine: "2.0 TFSI Benzina 150cv", fuel: "benzina", wltp: 6.4 },{ engine: "2.0 TDI Diesel 136cv", fuel: "diesel", wltp: 4.7 },{ engine: "2.0 TDI Diesel 177cv", fuel: "diesel", wltp: 5.0 }],
-    "A6": [{ engine: "2.0 TFSI Benzina 180cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.0 TDI Diesel 190cv", fuel: "diesel", wltp: 5.2 },{ engine: "3.0 TDI Diesel 218cv", fuel: "diesel", wltp: 5.5 }],
-    "Q2": [{ engine: "1.0 TFSI Benzina 116cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 TFSI Benzina 150cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.6 TDI Diesel 116cv", fuel: "diesel", wltp: 4.5 }],
-    "Q3": [{ engine: "1.5 TFSI Benzina 150cv", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.2 }],
-    "Q5": [{ engine: "2.0 TFSI Benzina 180cv", fuel: "benzina", wltp: 7.8 },{ engine: "2.0 TDI Diesel 190cv", fuel: "diesel", wltp: 5.8 }]
-  },
-  "BMW": {
-    "Serie 1": [{ engine: "116i Benzina 109cv", fuel: "benzina", wltp: 6.5 },{ engine: "118i Benzina 140cv", fuel: "benzina", wltp: 6.1 },{ engine: "116d Diesel 116cv", fuel: "diesel", wltp: 4.4 },{ engine: "118d Diesel 150cv", fuel: "diesel", wltp: 4.5 }],
-    "Serie 2": [{ engine: "218i Benzina 136cv", fuel: "benzina", wltp: 6.5 },{ engine: "218d Diesel 150cv", fuel: "diesel", wltp: 4.8 }],
-    "Serie 3": [{ engine: "316i Benzina 102cv", fuel: "benzina", wltp: 7.0 },{ engine: "320i Benzina 184cv", fuel: "benzina", wltp: 6.5 },{ engine: "318d Diesel 143cv", fuel: "diesel", wltp: 4.7 },{ engine: "320d Diesel 190cv", fuel: "diesel", wltp: 4.9 }],
-    "Serie 4": [{ engine: "420i Benzina 184cv", fuel: "benzina", wltp: 6.8 },{ engine: "420d Diesel 190cv", fuel: "diesel", wltp: 5.2 }],
-    "Serie 5": [{ engine: "520i Benzina 184cv", fuel: "benzina", wltp: 7.2 },{ engine: "520d Diesel 190cv", fuel: "diesel", wltp: 5.0 }],
-    "X1": [{ engine: "sDrive18i Benzina 140cv", fuel: "benzina", wltp: 6.8 },{ engine: "sDrive18d Diesel 150cv", fuel: "diesel", wltp: 5.1 },{ engine: "xDrive25e PHEV 220cv", fuel: "ibrido_plug", wltp: 1.6 }],
-    "X3": [{ engine: "xDrive20i Benzina 184cv", fuel: "benzina", wltp: 7.5 },{ engine: "xDrive20d Diesel 190cv", fuel: "diesel", wltp: 5.5 }]
-  },
-  "Citroën": {
-    "C1": [{ engine: "1.0 VTi Benzina 68cv", fuel: "benzina", wltp: 4.8 },{ engine: "1.2 VTi Benzina 82cv", fuel: "benzina", wltp: 5.0 }],
-    "C3": [{ engine: "1.2 PureTech Benzina 83cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.2 PureTech Benzina 110cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 BlueHDi Diesel 100cv", fuel: "diesel", wltp: 4.3 }],
-    "C3 Aircross": [{ engine: "1.2 PureTech Benzina 110cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.5 BlueHDi Diesel 100cv", fuel: "diesel", wltp: 4.7 }],
-    "C4": [{ engine: "1.2 PureTech Benzina 130cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.5 BlueHDi Diesel 110cv", fuel: "diesel", wltp: 4.7 },{ engine: "ë-C4 Elettrico 136cv", fuel: "elettrico", wltp: 16.4 }],
-    "C4 Cactus": [{ engine: "1.2 PureTech Benzina 110cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.6 BlueHDi Diesel 100cv", fuel: "diesel", wltp: 4.5 }],
-    "C5 Aircross": [{ engine: "1.2 PureTech Benzina 130cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 BlueHDi Diesel 130cv", fuel: "diesel", wltp: 5.0 },{ engine: "PHEV 225cv", fuel: "ibrido_plug", wltp: 1.6 }],
-    "Berlingo": [{ engine: "1.2 PureTech Benzina 110cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.5 BlueHDi Diesel 100cv", fuel: "diesel", wltp: 5.2 }]
-  },
-  "Dacia": {
-    "Sandero": [{ engine: "1.0 SCe Benzina 75cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.0 TCe Benzina 90cv", fuel: "benzina", wltp: 5.7 },{ engine: "1.0 TCe GPL 100cv", fuel: "gpl", wltp: 6.8 }],
-    "Duster": [{ engine: "1.6 SCe Benzina 115cv", fuel: "benzina", wltp: 7.8 },{ engine: "1.3 TCe Benzina 130cv", fuel: "benzina", wltp: 7.2 },{ engine: "1.5 Blue dCi Diesel 115cv", fuel: "diesel", wltp: 5.5 },{ engine: "1.6 GPL 114cv", fuel: "gpl", wltp: 9.0 }],
-    "Logan": [{ engine: "1.0 SCe Benzina 65cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 4.8 }],
-    "Lodgy": [{ engine: "1.6 Benzina 85cv", fuel: "benzina", wltp: 7.5 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 5.5 }],
-    "Dokker": [{ engine: "1.6 Benzina 85cv", fuel: "benzina", wltp: 7.5 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 5.5 }],
-    "Spring": [{ engine: "Elettrico 45cv", fuel: "elettrico", wltp: 13.9 }]
-  },
-  "Fiat": {
-    "500": [{ engine: "1.2 Benzina 69cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 MHEV Benzina 70cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.2 GPL 69cv", fuel: "gpl", wltp: 7.0 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 4.2 },{ engine: "500e Elettrico 118cv", fuel: "elettrico", wltp: 14.0 }],
-    "500L": [{ engine: "1.4 Benzina 95cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.4 T-Jet Benzina 120cv", fuel: "benzina", wltp: 7.4 },{ engine: "1.4 GPL 95cv", fuel: "gpl", wltp: 8.2 },{ engine: "1.3 Multijet Diesel 85cv", fuel: "diesel", wltp: 5.4 },{ engine: "1.3 Multijet Diesel 95cv", fuel: "diesel", wltp: 5.6 },{ engine: "1.6 Multijet Diesel 105cv", fuel: "diesel", wltp: 5.8 }],
-    "500X": [{ engine: "1.0 FireFly Benzina 120cv", fuel: "benzina", wltp: 6.6 },{ engine: "1.3 FireFly Benzina 150cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.3 FireFly Diesel 95cv", fuel: "diesel", wltp: 5.2 }],
-    "Panda": [{ engine: "1.2 Benzina 69cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 MHEV Benzina 70cv", fuel: "benzina", wltp: 5.2 },{ engine: "0.9 TwinAir Benzina 85cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.2 GPL 69cv", fuel: "gpl", wltp: 6.5 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 4.5 },{ engine: "1.3 Multijet Diesel 80cv", fuel: "diesel", wltp: 4.5 }],
-    "Punto": [{ engine: "1.2 Benzina 69cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.4 Benzina 77cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.4 GPL 77cv", fuel: "gpl", wltp: 7.8 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 5.0 },{ engine: "1.3 Multijet Diesel 90cv", fuel: "diesel", wltp: 5.2 }],
-    "Bravo": [{ engine: "1.4 T-Jet Benzina 120cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.4 T-Jet GPL 120cv", fuel: "gpl", wltp: 8.0 },{ engine: "1.6 Multijet Diesel 120cv", fuel: "diesel", wltp: 5.2 },{ engine: "2.0 Multijet Diesel 165cv", fuel: "diesel", wltp: 5.8 }],
-    "Tipo": [{ engine: "1.4 Benzina 95cv", fuel: "benzina", wltp: 6.4 },{ engine: "1.6 Benzina 110cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.4 GPL 95cv", fuel: "gpl", wltp: 7.5 },{ engine: "1.3 Multijet Diesel 95cv", fuel: "diesel", wltp: 5.2 },{ engine: "1.6 Multijet Diesel 120cv", fuel: "diesel", wltp: 4.9 }],
-    "Doblo": [{ engine: "1.4 Benzina 95cv", fuel: "benzina", wltp: 7.2 },{ engine: "1.4 GPL 95cv", fuel: "gpl", wltp: 8.5 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 5.5 },{ engine: "1.6 Multijet Diesel 90cv", fuel: "diesel", wltp: 5.8 }],
-    "Qubo": [{ engine: "1.4 Benzina 73cv", fuel: "benzina", wltp: 7.5 },{ engine: "1.4 GPL 73cv", fuel: "gpl", wltp: 9.0 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 5.6 }],
-    "Freemont": [{ engine: "2.0 Benzina 170cv", fuel: "benzina", wltp: 9.5 },{ engine: "2.0 Multijet Diesel 140cv", fuel: "diesel", wltp: 6.5 }],
-    "Linea": [{ engine: "1.4 Benzina 77cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.3 Multijet Diesel 90cv", fuel: "diesel", wltp: 5.5 }],
-    "Grande Punto": [{ engine: "1.4 Benzina 77cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.4 GPL 77cv", fuel: "gpl", wltp: 7.8 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 5.0 }]
-  },
-  "Ford": {
-    "B-Max": [{ engine: "1.0 EcoBoost Benzina 100cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.4 Benzina 90cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.4 GPL 90cv", fuel: "gpl", wltp: 8.0 },{ engine: "1.5 TDCi Diesel 75cv", fuel: "diesel", wltp: 5.1 },{ engine: "1.5 TDCi Diesel 95cv", fuel: "diesel", wltp: 5.3 }],
-    "C-Max": [{ engine: "1.0 EcoBoost Benzina 125cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.5 TDCi Diesel 120cv", fuel: "diesel", wltp: 5.2 }],
-    "EcoSport": [{ engine: "1.0 EcoBoost Benzina 125cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.5 TDCi Diesel 100cv", fuel: "diesel", wltp: 5.2 }],
-    "Fiesta": [{ engine: "1.0 EcoBoost Benzina 95cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 EcoBoost Benzina 125cv", fuel: "benzina", wltp: 5.9 },{ engine: "1.4 GPL 97cv", fuel: "gpl", wltp: 7.5 },{ engine: "1.5 TDCi Diesel 85cv", fuel: "diesel", wltp: 4.5 }],
-    "Focus": [{ engine: "1.0 EcoBoost Benzina 100cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.0 EcoBoost Benzina 125cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 EcoBlue Diesel 120cv", fuel: "diesel", wltp: 4.8 },{ engine: "2.0 EcoBlue Diesel 150cv", fuel: "diesel", wltp: 5.0 }],
-    "Galaxy": [{ engine: "2.0 EcoBlue Diesel 150cv", fuel: "diesel", wltp: 6.5 }],
-    "Ka": [{ engine: "1.2 Benzina 70cv", fuel: "benzina", wltp: 5.8 }],
-    "Kuga": [{ engine: "1.5 EcoBoost Benzina 150cv", fuel: "benzina", wltp: 6.9 },{ engine: "2.5 PHEV 225cv", fuel: "ibrido_plug", wltp: 1.7 },{ engine: "2.0 EcoBlue Diesel 150cv", fuel: "diesel", wltp: 5.5 }],
-    "Mondeo": [{ engine: "1.5 EcoBoost Benzina 160cv", fuel: "benzina", wltp: 7.0 },{ engine: "2.0 TDCi Diesel 150cv", fuel: "diesel", wltp: 5.2 }],
-    "Puma": [{ engine: "1.0 EcoBoost MHEV Benzina 125cv", fuel: "benzina", wltp: 5.5 }],
-    "S-Max": [{ engine: "1.5 EcoBoost Benzina 165cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.0 EcoBlue Diesel 150cv", fuel: "diesel", wltp: 6.0 }]
-  },
-  "Honda": {
-    "Civic": [{ engine: "1.0 VTEC Benzina 126cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.5 VTEC Benzina 182cv", fuel: "benzina", wltp: 6.2 },{ engine: "e:HEV Ibrido 122cv", fuel: "ibrido", wltp: 5.0 }],
-    "CR-V": [{ engine: "1.5 VTEC Benzina 173cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.0 i-MMD Ibrido 184cv", fuel: "ibrido", wltp: 6.0 }],
-    "HR-V": [{ engine: "e:HEV Ibrido 131cv", fuel: "ibrido", wltp: 5.4 }],
-    "Jazz": [{ engine: "e:HEV Ibrido 109cv", fuel: "ibrido", wltp: 4.5 },{ engine: "1.3 i-VTEC Benzina 102cv", fuel: "benzina", wltp: 5.8 }]
-  },
-  "Hyundai": {
-    "i10": [{ engine: "1.0 Benzina 67cv", fuel: "benzina", wltp: 5.1 },{ engine: "1.2 Benzina 84cv", fuel: "benzina", wltp: 5.3 }],
-    "i20": [{ engine: "1.2 Benzina 84cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 T-GDI MHEV Benzina 100cv", fuel: "benzina", wltp: 5.5 }],
-    "i30": [{ engine: "1.0 T-GDI Benzina 120cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.4 T-GDI Benzina 140cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.6 CRDi Diesel 115cv", fuel: "diesel", wltp: 4.8 }],
-    "ix20": [{ engine: "1.4 Benzina 90cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.4 CRDi Diesel 90cv", fuel: "diesel", wltp: 5.2 }],
-    "ix35": [{ engine: "1.6 GDI Benzina 135cv", fuel: "benzina", wltp: 8.0 },{ engine: "2.0 CRDi Diesel 136cv", fuel: "diesel", wltp: 5.8 }],
-    "Kona": [{ engine: "1.0 T-GDI Benzina 120cv", fuel: "benzina", wltp: 6.2 },{ engine: "Electric 204cv", fuel: "elettrico", wltp: 14.7 }],
-    "Tucson": [{ engine: "1.6 GDI Benzina 150cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.6 CRDi Diesel 136cv", fuel: "diesel", wltp: 5.2 },{ engine: "1.6 PHEV 265cv", fuel: "ibrido_plug", wltp: 1.6 }]
-  },
-  "Jeep": {
-    "Cherokee": [{ engine: "2.0 Multijet Diesel 170cv", fuel: "diesel", wltp: 7.0 }],
-    "Compass": [{ engine: "1.3 Turbo Benzina 130cv", fuel: "benzina", wltp: 6.4 },{ engine: "1.6 Multijet Diesel 130cv", fuel: "diesel", wltp: 5.1 },{ engine: "1.3 PHEV 240cv", fuel: "ibrido_plug", wltp: 2.1 }],
-    "Renegade": [{ engine: "1.0 T3 Benzina 120cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.3 Multiair Benzina 150cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.6 Multijet Diesel 120cv", fuel: "diesel", wltp: 5.0 },{ engine: "1.3 PHEV 190cv", fuel: "ibrido_plug", wltp: 2.0 }],
-    "Wrangler": [{ engine: "2.0 Turbo Benzina 272cv", fuel: "benzina", wltp: 11.5 },{ engine: "2.2 Multijet Diesel 200cv", fuel: "diesel", wltp: 8.2 }]
-  },
-  "Kia": {
-    "Ceed": [{ engine: "1.0 T-GDI Benzina 120cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.4 T-GDI Benzina 140cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.6 CRDi Diesel 136cv", fuel: "diesel", wltp: 4.8 }],
-    "Niro": [{ engine: "HEV Ibrido 141cv", fuel: "ibrido", wltp: 4.8 },{ engine: "PHEV 183cv", fuel: "ibrido_plug", wltp: 1.3 },{ engine: "EV 204cv", fuel: "elettrico", wltp: 15.0 }],
-    "Picanto": [{ engine: "1.0 Benzina 67cv", fuel: "benzina", wltp: 5.0 },{ engine: "1.2 Benzina 84cv", fuel: "benzina", wltp: 5.3 }],
-    "Rio": [{ engine: "1.0 T-GDI Benzina 100cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.4 CVVT Benzina 100cv", fuel: "benzina", wltp: 6.5 }],
-    "Sportage": [{ engine: "1.6 T-GDI Benzina 150cv", fuel: "benzina", wltp: 7.2 },{ engine: "1.6 CRDi Diesel 136cv", fuel: "diesel", wltp: 5.4 },{ engine: "1.6 PHEV 265cv", fuel: "ibrido_plug", wltp: 1.7 }],
-    "Stonic": [{ engine: "1.0 T-GDI MHEV Benzina 100cv", fuel: "benzina", wltp: 5.8 }],
-    "Xceed": [{ engine: "1.0 T-GDI Benzina 120cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.6 CRDi Diesel 136cv", fuel: "diesel", wltp: 5.0 }]
-  },
-  "Lancia": {
-    "Delta": [{ engine: "1.4 Turbo Benzina 120cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.6 Multijet Diesel 120cv", fuel: "diesel", wltp: 5.5 }],
-    "Musa": [{ engine: "1.4 Benzina 77cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.3 Multijet Diesel 70cv", fuel: "diesel", wltp: 5.2 }],
-    "Ypsilon": [{ engine: "1.2 Benzina 69cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 MHEV Benzina 70cv", fuel: "benzina", wltp: 5.4 },{ engine: "1.2 GPL 69cv", fuel: "gpl", wltp: 6.2 },{ engine: "1.3 Multijet Diesel 75cv", fuel: "diesel", wltp: 4.5 }]
-  },
-  "Land Rover": {
-    "Discovery Sport": [{ engine: "2.0 Si4 Benzina 240cv", fuel: "benzina", wltp: 9.5 },{ engine: "2.0 TD4 Diesel 150cv", fuel: "diesel", wltp: 6.5 }],
-    "Freelander": [{ engine: "2.2 TD4 Diesel 150cv", fuel: "diesel", wltp: 7.0 }]
-  },
-  "Mazda": {
-    "2": [{ engine: "1.5 Skyactiv-G Benzina 90cv", fuel: "benzina", wltp: 5.5 }],
-    "3": [{ engine: "2.0 Skyactiv-G Benzina 122cv", fuel: "benzina", wltp: 6.5 },{ engine: "e-Skyactiv X Ibrido 186cv", fuel: "ibrido", wltp: 5.8 }],
-    "6": [{ engine: "2.0 Skyactiv-G Benzina 165cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.2 Skyactiv-D Diesel 150cv", fuel: "diesel", wltp: 5.5 }],
-    "CX-3": [{ engine: "2.0 Skyactiv-G Benzina 121cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.8 Skyactiv-D Diesel 116cv", fuel: "diesel", wltp: 5.0 }],
-    "CX-5": [{ engine: "2.0 Skyactiv-G Benzina 165cv", fuel: "benzina", wltp: 7.4 },{ engine: "2.2 Skyactiv-D Diesel 150cv", fuel: "diesel", wltp: 5.4 }],
-    "CX-30": [{ engine: "2.0 Skyactiv-G Benzina 122cv", fuel: "benzina", wltp: 6.8 },{ engine: "e-Skyactiv X Ibrido 186cv", fuel: "ibrido", wltp: 6.0 }]
-  },
-  "Mercedes": {
-    "Classe A": [{ engine: "A 180 Benzina 136cv", fuel: "benzina", wltp: 6.0 },{ engine: "A 200 Benzina 163cv", fuel: "benzina", wltp: 6.2 },{ engine: "A 180d Diesel 116cv", fuel: "diesel", wltp: 4.5 }],
-    "Classe B": [{ engine: "B 180 Benzina 136cv", fuel: "benzina", wltp: 6.2 },{ engine: "B 180d Diesel 116cv", fuel: "diesel", wltp: 4.8 }],
-    "Classe C": [{ engine: "C 180 Benzina 156cv", fuel: "benzina", wltp: 6.5 },{ engine: "C 200 Benzina 204cv", fuel: "benzina", wltp: 6.5 },{ engine: "C 200d Diesel 160cv", fuel: "diesel", wltp: 4.8 },{ engine: "C 220d Diesel 200cv", fuel: "diesel", wltp: 4.9 }],
-    "Classe E": [{ engine: "E 200 Benzina 197cv", fuel: "benzina", wltp: 7.0 },{ engine: "E 220d Diesel 194cv", fuel: "diesel", wltp: 5.2 }],
-    "GLA": [{ engine: "GLA 200 Benzina 163cv", fuel: "benzina", wltp: 6.7 },{ engine: "GLA 220d Diesel 190cv", fuel: "diesel", wltp: 5.3 }],
-    "GLC": [{ engine: "GLC 200 Benzina 197cv", fuel: "benzina", wltp: 8.0 },{ engine: "GLC 220d Diesel 194cv", fuel: "diesel", wltp: 5.8 }]
-  },
-  "Mini": {
-    "Countryman": [{ engine: "Cooper S Benzina 192cv", fuel: "benzina", wltp: 7.5 },{ engine: "Cooper D Diesel 150cv", fuel: "diesel", wltp: 5.5 }],
-    "Mini 3 porte": [{ engine: "Cooper Benzina 136cv", fuel: "benzina", wltp: 6.5 },{ engine: "Cooper D Diesel 116cv", fuel: "diesel", wltp: 4.5 }],
-    "Mini 5 porte": [{ engine: "Cooper Benzina 136cv", fuel: "benzina", wltp: 6.5 },{ engine: "One D Diesel 95cv", fuel: "diesel", wltp: 4.4 }],
-    "Paceman": [{ engine: "Cooper S Benzina 184cv", fuel: "benzina", wltp: 7.8 },{ engine: "Cooper D Diesel 112cv", fuel: "diesel", wltp: 5.2 }]
-  },
-  "Mitsubishi": {
-    "ASX": [{ engine: "1.6 Benzina 117cv", fuel: "benzina", wltp: 7.4 },{ engine: "2.0 Benzina 150cv", fuel: "benzina", wltp: 7.8 },{ engine: "1.6 GPL 117cv", fuel: "gpl", wltp: 8.8 },{ engine: "1.8 Diesel 116cv", fuel: "diesel", wltp: 5.6 }],
-    "Eclipse Cross": [{ engine: "1.5 Turbo Benzina 163cv", fuel: "benzina", wltp: 7.5 },{ engine: "PHEV 188cv", fuel: "ibrido_plug", wltp: 1.9 }],
-    "Outlander": [{ engine: "2.0 Benzina 150cv", fuel: "benzina", wltp: 9.0 },{ engine: "PHEV 230cv", fuel: "ibrido_plug", wltp: 2.0 }],
-    "Space Star": [{ engine: "1.2 Benzina 80cv", fuel: "benzina", wltp: 5.5 }]
-  },
-  "Nissan": {
-    "Juke": [{ engine: "1.0 DIG-T Benzina 114cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.6 HEV Ibrido 143cv", fuel: "ibrido", wltp: 5.5 }],
-    "Leaf": [{ engine: "Electric 150cv", fuel: "elettrico", wltp: 15.0 },{ engine: "Electric e+ 217cv", fuel: "elettrico", wltp: 18.0 }],
-    "Micra": [{ engine: "1.0 IG-T Benzina 100cv", fuel: "benzina", wltp: 5.8 },{ engine: "0.9 IG-T Benzina 90cv", fuel: "benzina", wltp: 5.5 }],
-    "Note": [{ engine: "1.2 Benzina 80cv", fuel: "benzina", wltp: 5.8 }],
-    "Qashqai": [{ engine: "1.2 DIG-T Benzina 115cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.3 DIG-T MHEV Benzina 158cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.5 dCi Diesel 115cv", fuel: "diesel", wltp: 5.2 },{ engine: "e-Power Ibrido 190cv", fuel: "ibrido", wltp: 5.3 }],
-    "X-Trail": [{ engine: "1.6 DIG-T Benzina 163cv", fuel: "benzina", wltp: 8.0 },{ engine: "1.6 dCi Diesel 130cv", fuel: "diesel", wltp: 6.0 }]
-  },
-  "Opel": {
-    "Adam": [{ engine: "1.2 Benzina 70cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.4 Benzina 87cv", fuel: "benzina", wltp: 5.8 }],
-    "Astra": [{ engine: "1.2 Turbo Benzina 110cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.4 Turbo Benzina 150cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 Diesel 122cv", fuel: "diesel", wltp: 4.7 },{ engine: "PHEV 180cv", fuel: "ibrido_plug", wltp: 1.5 }],
-    "Corsa": [{ engine: "1.2 Benzina 75cv", fuel: "benzina", wltp: 5.6 },{ engine: "1.2 Turbo Benzina 100cv", fuel: "benzina", wltp: 5.7 },{ engine: "1.4 Benzina 90cv", fuel: "benzina", wltp: 6.0 },{ engine: "Corsa-e Elettrico 136cv", fuel: "elettrico", wltp: 14.9 }],
-    "Crossland": [{ engine: "1.2 Benzina 83cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.2 Turbo Benzina 110cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 Diesel 110cv", fuel: "diesel", wltp: 4.8 }],
-    "Grandland": [{ engine: "1.2 Turbo Benzina 130cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.6 Diesel 130cv", fuel: "diesel", wltp: 5.5 },{ engine: "PHEV 225cv", fuel: "ibrido_plug", wltp: 1.6 }],
-    "Insignia": [{ engine: "1.5 Turbo Benzina 165cv", fuel: "benzina", wltp: 7.0 },{ engine: "2.0 CDTi Diesel 170cv", fuel: "diesel", wltp: 5.5 }],
-    "Meriva": [{ engine: "1.4 Benzina 100cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.3 CDTi Diesel 75cv", fuel: "diesel", wltp: 5.0 }],
-    "Mokka": [{ engine: "1.2 Turbo Benzina 130cv", fuel: "benzina", wltp: 6.3 },{ engine: "Mokka-e Elettrico 136cv", fuel: "elettrico", wltp: 15.0 }],
-    "Zafira": [{ engine: "1.4 Turbo Benzina 140cv", fuel: "benzina", wltp: 7.2 },{ engine: "2.0 CDTi Diesel 130cv", fuel: "diesel", wltp: 6.0 }]
-  },
-  "Peugeot": {
-    "107": [{ engine: "1.0 Benzina 68cv", fuel: "benzina", wltp: 5.0 }],
-    "108": [{ engine: "1.0 VTi Benzina 68cv", fuel: "benzina", wltp: 4.8 },{ engine: "1.2 VTi Benzina 82cv", fuel: "benzina", wltp: 5.0 }],
-    "2008": [{ engine: "1.2 PureTech Benzina 100cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.2 PureTech Benzina 130cv", fuel: "benzina", wltp: 6.2 },{ engine: "1.5 BlueHDi Diesel 110cv", fuel: "diesel", wltp: 4.8 },{ engine: "e-2008 Elettrico 136cv", fuel: "elettrico", wltp: 15.8 }],
-    "207": [{ engine: "1.4 VTi Benzina 95cv", fuel: "benzina", wltp: 6.8 },{ engine: "1.6 HDi Diesel 90cv", fuel: "diesel", wltp: 5.2 }],
-    "208": [{ engine: "1.2 PureTech Benzina 75cv", fuel: "benzina", wltp: 5.3 },{ engine: "1.2 PureTech Benzina 100cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.4 GPL 95cv", fuel: "gpl", wltp: 7.0 },{ engine: "1.5 BlueHDi Diesel 100cv", fuel: "diesel", wltp: 4.2 },{ engine: "e-208 Elettrico 136cv", fuel: "elettrico", wltp: 14.9 }],
-    "3008": [{ engine: "1.2 PureTech Benzina 130cv", fuel: "benzina", wltp: 6.4 },{ engine: "1.5 BlueHDi Diesel 130cv", fuel: "diesel", wltp: 5.0 },{ engine: "PHEV 225cv", fuel: "ibrido_plug", wltp: 1.6 }],
-    "308": [{ engine: "1.2 PureTech Benzina 110cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 BlueHDi Diesel 130cv", fuel: "diesel", wltp: 4.5 },{ engine: "PHEV 180cv", fuel: "ibrido_plug", wltp: 1.5 }],
-    "5008": [{ engine: "1.2 PureTech Benzina 130cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.5 BlueHDi Diesel 130cv", fuel: "diesel", wltp: 5.5 }],
-    "Partner": [{ engine: "1.2 PureTech Benzina 110cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.5 BlueHDi Diesel 100cv", fuel: "diesel", wltp: 5.5 }]
-  },
-  "Renault": {
-    "Captur": [{ engine: "1.0 TCe Benzina 91cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.3 TCe Benzina 130cv", fuel: "benzina", wltp: 6.2 },{ engine: "E-Tech Hybrid 145cv", fuel: "ibrido", wltp: 4.8 },{ engine: "E-Tech PHEV 160cv", fuel: "ibrido_plug", wltp: 1.5 }],
-    "Clio": [{ engine: "1.2 Benzina 75cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.0 TCe Benzina 91cv", fuel: "benzina", wltp: 5.7 },{ engine: "1.2 GPL 75cv", fuel: "gpl", wltp: 6.8 },{ engine: "1.4 GPL 98cv", fuel: "gpl", wltp: 7.2 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 4.5 },{ engine: "E-Tech Full Hybrid 140cv", fuel: "ibrido", wltp: 4.6 }],
-    "Kadjar": [{ engine: "1.3 TCe Benzina 140cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.5 Blue dCi Diesel 115cv", fuel: "diesel", wltp: 5.5 }],
-    "Megane": [{ engine: "1.3 TCe Benzina 115cv", fuel: "benzina", wltp: 6.3 },{ engine: "1.3 TCe Benzina 140cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.5 Blue dCi Diesel 115cv", fuel: "diesel", wltp: 4.7 }],
-    "Scenic": [{ engine: "1.3 TCe Benzina 140cv", fuel: "benzina", wltp: 7.0 },{ engine: "1.5 dCi Diesel 110cv", fuel: "diesel", wltp: 5.5 }],
-    "Talisman": [{ engine: "1.6 TCe Benzina 150cv", fuel: "benzina", wltp: 7.2 },{ engine: "1.5 dCi Diesel 110cv", fuel: "diesel", wltp: 5.5 }],
-    "Twingo": [{ engine: "1.0 SCe Benzina 65cv", fuel: "benzina", wltp: 5.2 },{ engine: "0.9 TCe Benzina 90cv", fuel: "benzina", wltp: 5.5 }],
-    "Zoe": [{ engine: "R110 Elettrico 108cv", fuel: "elettrico", wltp: 17.2 },{ engine: "R135 Elettrico 135cv", fuel: "elettrico", wltp: 17.5 }]
-  },
-  "Seat": {
-    "Arona": [{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 TSI Benzina 115cv", fuel: "benzina", wltp: 6.0 }],
-    "Ateca": [{ engine: "1.0 TSI Benzina 110cv", fuel: "benzina", wltp: 6.4 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.2 }],
-    "Ibiza": [{ engine: "1.0 MPI Benzina 80cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.6 },{ engine: "1.0 TSI GPL 90cv", fuel: "gpl", wltp: 6.8 }],
-    "Leon": [{ engine: "1.0 TSI Benzina 110cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 6.0 },{ engine: "2.0 TDI Diesel 115cv", fuel: "diesel", wltp: 4.6 },{ engine: "e-Hybrid PHEV 204cv", fuel: "ibrido_plug", wltp: 1.5 }],
-    "Tarraco": [{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.8 }]
-  },
-  "Skoda": {
-    "Fabia": [{ engine: "1.0 MPI Benzina 65cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.6 },{ engine: "1.4 TDI Diesel 90cv", fuel: "diesel", wltp: 4.2 }],
-    "Kamiq": [{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 6.0 }],
-    "Karoq": [{ engine: "1.0 TSI Benzina 115cv", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.2 }],
-    "Kodiaq": [{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 7.8 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 6.0 }],
-    "Octavia": [{ engine: "1.0 TSI Benzina 110cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 6.0 },{ engine: "2.0 TDI Diesel 116cv", fuel: "diesel", wltp: 4.6 },{ engine: "iV PHEV 245cv", fuel: "ibrido_plug", wltp: 1.5 }],
-    "Rapid": [{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.4 TDI Diesel 90cv", fuel: "diesel", wltp: 4.5 }],
-    "Scala": [{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.8 }],
-    "Superb": [{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.2 }],
-    "Yeti": [{ engine: "1.2 TSI Benzina 105cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.0 TDI Diesel 110cv", fuel: "diesel", wltp: 5.5 }]
-  },
-  "Subaru": {
-    "Forester": [{ engine: "2.0i Benzina 150cv", fuel: "benzina", wltp: 8.5 },{ engine: "2.0i e-BOXER Ibrido 150cv", fuel: "ibrido", wltp: 7.5 }],
-    "Outback": [{ engine: "2.5i Benzina 175cv", fuel: "benzina", wltp: 9.0 }],
-    "XV": [{ engine: "1.6i Benzina 114cv", fuel: "benzina", wltp: 7.8 },{ engine: "2.0i e-BOXER Ibrido 150cv", fuel: "ibrido", wltp: 6.5 }]
-  },
-  "Suzuki": {
-    "Ignis": [{ engine: "1.2 MHEV Benzina 83cv", fuel: "benzina", wltp: 5.0 }],
-    "Jimny": [{ engine: "1.5 Benzina 102cv", fuel: "benzina", wltp: 8.5 }],
-    "S-Cross": [{ engine: "1.4 Boosterjet MHEV Benzina 129cv", fuel: "benzina", wltp: 6.2 }],
-    "Swift": [{ engine: "1.2 MHEV Benzina 90cv", fuel: "benzina", wltp: 5.0 },{ engine: "1.0 Boosterjet Benzina 111cv", fuel: "benzina", wltp: 5.5 }],
-    "Vitara": [{ engine: "1.4 Boosterjet MHEV Benzina 129cv", fuel: "benzina", wltp: 6.5 },{ engine: "1.6 Benzina 120cv", fuel: "benzina", wltp: 7.2 }]
-  },
-  "Tesla": {
-    "Model 3": [{ engine: "Standard Range Elettrico 283cv", fuel: "elettrico", wltp: 14.3 },{ engine: "Long Range AWD Elettrico 480cv", fuel: "elettrico", wltp: 15.0 }],
-    "Model Y": [{ engine: "Standard Range Elettrico 283cv", fuel: "elettrico", wltp: 15.7 },{ engine: "Long Range AWD Elettrico 480cv", fuel: "elettrico", wltp: 16.9 }]
-  },
-  "Toyota": {
-    "Auris": [{ engine: "1.6 Benzina 132cv", fuel: "benzina", wltp: 7.5 },{ engine: "1.8 Hybrid 136cv", fuel: "ibrido", wltp: 4.5 },{ engine: "1.6 Diesel 112cv", fuel: "diesel", wltp: 5.2 }],
-    "Aygo": [{ engine: "1.0 VVT-i Benzina 72cv", fuel: "benzina", wltp: 5.0 }],
-    "C-HR": [{ engine: "1.8 Hybrid 122cv", fuel: "ibrido", wltp: 4.9 },{ engine: "2.0 Hybrid 184cv", fuel: "ibrido", wltp: 5.5 }],
-    "Corolla": [{ engine: "1.8 Hybrid 122cv", fuel: "ibrido", wltp: 4.5 },{ engine: "2.0 Hybrid 196cv", fuel: "ibrido", wltp: 4.8 }],
-    "RAV4": [{ engine: "2.0 Benzina 175cv", fuel: "benzina", wltp: 8.5 },{ engine: "2.5 Hybrid 218cv", fuel: "ibrido", wltp: 5.8 },{ engine: "2.5 PHEV 306cv", fuel: "ibrido_plug", wltp: 1.1 }],
-    "Yaris": [{ engine: "1.0 VVT-i Benzina 72cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.5 Hybrid 116cv", fuel: "ibrido", wltp: 3.8 }],
-    "Yaris Cross": [{ engine: "1.5 Hybrid 116cv", fuel: "ibrido", wltp: 4.7 }]
-  },
-  "Volkswagen": {
-    "Golf": [{ engine: "1.0 TSI Benzina 90cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.0 TSI Benzina 110cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.5 TSI Benzina 130cv", fuel: "benzina", wltp: 5.9 },{ engine: "1.4 TSI GPL 130cv", fuel: "gpl", wltp: 7.2 },{ engine: "2.0 TDI Diesel 116cv", fuel: "diesel", wltp: 4.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 4.8 },{ engine: "eHybrid PHEV 204cv", fuel: "ibrido_plug", wltp: 1.4 }],
-    "ID.3": [{ engine: "Pro Performance Elettrico 204cv", fuel: "elettrico", wltp: 15.4 }],
-    "ID.4": [{ engine: "Pro Performance Elettrico 204cv", fuel: "elettrico", wltp: 16.5 }],
-    "Passat": [{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 4.9 },{ engine: "GTE PHEV 218cv", fuel: "ibrido_plug", wltp: 1.8 }],
-    "Polo": [{ engine: "1.0 MPI Benzina 65cv", fuel: "benzina", wltp: 5.3 },{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.5 },{ engine: "1.0 TGI GPL 90cv", fuel: "gpl", wltp: 6.5 }],
-    "Sharan": [{ engine: "1.4 TSI Benzina 150cv", fuel: "benzina", wltp: 7.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 6.0 }],
-    "T-Cross": [{ engine: "1.0 TSI Benzina 95cv", fuel: "benzina", wltp: 5.8 },{ engine: "1.0 TSI Benzina 115cv", fuel: "benzina", wltp: 6.0 }],
-    "T-Roc": [{ engine: "1.0 TSI Benzina 115cv", fuel: "benzina", wltp: 6.1 },{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 6.5 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.2 }],
-    "Tiguan": [{ engine: "1.5 TSI Benzina 130cv", fuel: "benzina", wltp: 7.0 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.5 },{ engine: "eHybrid PHEV 245cv", fuel: "ibrido_plug", wltp: 1.8 }],
-    "Touran": [{ engine: "1.5 TSI Benzina 150cv", fuel: "benzina", wltp: 7.2 },{ engine: "2.0 TDI Diesel 150cv", fuel: "diesel", wltp: 5.8 }],
-    "Up": [{ engine: "1.0 MPI Benzina 65cv", fuel: "benzina", wltp: 4.8 },{ engine: "1.0 TGI GPL 90cv", fuel: "gpl", wltp: 5.5 },{ engine: "e-Up Elettrico 83cv", fuel: "elettrico", wltp: 12.7 }]
-  },
-  "Volvo": {
-    "V40": [{ engine: "T2 Benzina 122cv", fuel: "benzina", wltp: 6.5 },{ engine: "D2 Diesel 120cv", fuel: "diesel", wltp: 4.5 }],
-    "V60": [{ engine: "B4 Benzina 197cv", fuel: "benzina", wltp: 7.0 },{ engine: "D4 Diesel 190cv", fuel: "diesel", wltp: 5.2 }],
-    "XC40": [{ engine: "B3 Benzina 163cv", fuel: "benzina", wltp: 6.6 },{ engine: "B4 Diesel 197cv", fuel: "diesel", wltp: 5.3 },{ engine: "Recharge PHEV 262cv", fuel: "ibrido_plug", wltp: 1.8 },{ engine: "Recharge Elettrico 231cv", fuel: "elettrico", wltp: 18.1 }],
-    "XC60": [{ engine: "B4 Benzina 197cv", fuel: "benzina", wltp: 7.5 },{ engine: "D4 Diesel 190cv", fuel: "diesel", wltp: 5.5 },{ engine: "Recharge PHEV 340cv", fuel: "ibrido_plug", wltp: 1.9 }],
-    "XC90": [{ engine: "B5 Benzina 250cv", fuel: "benzina", wltp: 9.5 },{ engine: "Recharge PHEV 390cv", fuel: "ibrido_plug", wltp: 2.6 }]
-  }
-};
+// ── CAR DATABASE (lazy-loaded on first vehicle modal open) ──────────────
+let CAR_DATABASE = null;
+async function ensureCarDatabase() {
+  if (CAR_DATABASE) return;
+  try {
+    const mod = await import('/car-database.js');
+    CAR_DATABASE = mod.default;
+  } catch(e) { console.warn('CAR_DATABASE load error', e); CAR_DATABASE = {}; }
+}
 
 const REAL_WORLD_COEFF = { benzina: 1.18, diesel: 1.15, gpl: 1.20, ibrido: 1.10, ibrido_plug: 1.35, elettrico: 1.12 };
 const CO2_FACTOR = { benzina: 2.31, diesel: 2.68, gpl: 1.65, ibrido: 2.31, ibrido_plug: 2.31, elettrico: 0.233 };
@@ -2049,8 +1845,9 @@ function renderSavingsSection() {
     const veh = getActiveVehicle(prof);
     if (!veh) return;
     const nameAbsences = absences.filter(a => a.person === name);
-    Object.entries(turniCompletati).forEach(([ds, driver]) => {
-      if (ds < resetDate || driver === name) return;
+    Object.entries(turniCompletati).forEach(([ds, turnData]) => {
+      const driverName = typeof turnData === 'string' ? turnData : turnData?.driver;
+      if (ds < resetDate || driverName === name) return;
       if (nameAbsences.some(a => a.from <= ds && a.to >= ds)) return;
       groupKmSaved += ROUND_TRIP_KM;
     });
@@ -2099,8 +1896,10 @@ function renderSavingsSection() {
 
 function renderStats() {
   const counts = { Ivan:0, Ilaria:0, Dervis:0, Filippo:0 };
-  Object.entries(turniCompletati).forEach(([ds, driver]) => {
-    if (ds >= resetDate && DRIVERS.includes(driver)) counts[driver]++;
+  Object.entries(turniCompletati).forEach(([ds, turnData]) => {
+    // turnData can be a string (legacy) or an object {driver, vehicleIdx, ...}
+    const driver = typeof turnData === 'string' ? turnData : turnData?.driver;
+    if (ds >= resetDate && driver && DRIVERS.includes(driver)) counts[driver]++;
   });
   const max = Math.max(...Object.values(counts)) || 1;
   let html = '';
@@ -2124,16 +1923,22 @@ function renderStats() {
 async function loadTurniCompletati() {
   if (!window._db) return;
   try {
-    // Load reset date
+    // Load reset date once
     const resetDoc = await window._fsGetDoc(window._fsDoc(window._db, 'config', 'resetDate'));
     if (resetDoc.exists()) resetDate = resetDoc.data().date || '2026-01-01';
 
-    // Load completed turns
-    const snap = await window._fsGetDocs(window._fsColl(window._db, 'turni_completati'));
-    turniCompletati = {};
-    snap.forEach(d => { turniCompletati[d.id] = d.data().driver; });
+    // Real-time listener for completed turns
+    const { collection, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+    onSnapshot(collection(window._db, 'turni_completati'), (snap) => {
+      turniCompletati = {};
+      snap.forEach(d => {
+        const data = d.data();
+        // Store as object if vehicleIdx present, otherwise just the driver string
+        turniCompletati[d.id] = data.vehicleIdx !== undefined ? data : (data.driver || d.id);
+      });
+      renderStats();
+    }, (e) => { console.warn('turniCompletati RT error', e); renderStats(); });
 
-    renderStats();
   } catch(e) { console.warn('loadTurniCompletati error', e); renderStats(); }
 }
 
@@ -2186,8 +1991,8 @@ function addAbsence() {
   const person = document.getElementById('absencePerson').value;
   const from = document.getElementById('absenceFrom').value;
   const to = document.getElementById('absenceTo').value;
-  if (!from || !to) { alert('Seleziona le date'); return; }
-  if (from > to) { alert('La data di fine deve essere dopo quella di inizio'); return; }
+  if (!from || !to) { showToast('Seleziona le date', 'error'); return; }
+  if (from > to) { showToast('La data di fine deve essere dopo quella di inizio', 'error'); return; }
   const newAbsence = { person, from, to, note: '' };
   absences.push(newAbsence);
   if (window._saveAbsence) window._saveAbsence(newAbsence);
@@ -2223,10 +2028,12 @@ function updateAbsenceGender(person) {
 function clearAbsenceForm() {
   const from = document.getElementById('absenceFrom');
   const to = document.getElementById('absenceTo');
+  const person = document.getElementById('absencePerson');
   from.value = '';
   to.value = '';
   from.classList.remove('has-value');
   to.classList.remove('has-value');
+  if (person) { person.value = 'Ivan'; updateAbsenceGender('Ivan'); }
 }
 
 // ── SWAP MODAL ────────────────────────────────────────────────────────────────
@@ -2280,8 +2087,8 @@ function saveSwap() {
   // Notify others of turn change
   if (selectedCheck) {
     const changedDriver = selectedCheck.id.replace('driverCheck_','');
-    const ds = currentSwapDate || '';
-    if (ds) sendPushToAll('cambio', `${currentUser} ha modificato il turno del ${ds}: guida ${changedDriver}`, '');
+    const notifyDs = currentSwapDate || '';
+    if (notifyDs) sendPushToAll('cambio', `${currentUser} ha modificato il turno del ${notifyDs}: guida ${changedDriver}`, '');
   }
 }
 
@@ -2341,7 +2148,7 @@ async function doResetPin() {
   closeConfirmPin();
   if (window._fsSetDoc && window._fsDoc && window._db) {
     try {
-      await window._fsSetDoc(window._fsDoc(window._db, 'profiles', name), { pin: '0000' }, { merge: true });
+      await window._fsSetDoc(window._fsDoc(window._db, 'profiles', name), { pin: hashPin('0000') }, { merge: true });
     } catch(e) { console.warn('Reset PIN error', e); }
   }
 }
@@ -2355,7 +2162,7 @@ function renderAdminPinList() {
     html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px">';
     html += '<div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;background:' + col.bg + ';color:' + col.fg + '">' + name[0] + '</div>';
     html += '<div style="font-size:13px;flex:1">' + name + '</div>';
-    html += '<button onclick="resetPinFor(\'' + name + '\')" style="font-size:11px;font-weight:500;color:var(--red);background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer">Reset PIN</button>';
+    html += '<button onclick="resetPinFor(\'' + name + '\')" style="font-size:11px;font-weight:500;color:var(--warn);background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer">Reset PIN</button>';
     html += '</div>';
   });
   list.innerHTML = html;
@@ -2380,22 +2187,24 @@ async function saveNotifPref(type, value) {
   }
 }
 
-// Save notification to Firestore for each user
+// Save notification to Firestore for each user (batched)
 async function saveNotificationForAll(type, title, body) {
   if (!window._db || !window._fsSetDoc || !window._fsDoc) return;
   const ts = new Date().toISOString();
   const id = ts.replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2,6);
-  DRIVERS.forEach(async function(name) {
-    try {
-      await window._fsSetDoc(
-        window._fsDoc(window._db, 'notifications', name + '_' + id),
-        { userId: name, type, title, body, ts, read: false }
-      );
-    } catch(e) {}
-  });
+  try {
+    const { writeBatch } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+    const batch = writeBatch(window._db);
+    DRIVERS.forEach(function(name) {
+      batch.set(window._fsDoc(window._db, 'notifications', name + '_' + id),
+        { userId: name, type, title, body, ts, read: false });
+    });
+    await batch.commit();
+  } catch(e) { console.warn('saveNotificationForAll batch error', e); }
 }
 
 // Send push to all users with a specific pref enabled
+// Send push to all users and persist notifications in Firestore
 async function sendPushToAll(type, title, body) {
   try {
     await fetch('/send-push-event', {
@@ -2404,6 +2213,8 @@ async function sendPushToAll(type, title, body) {
       body: JSON.stringify({ type, title, body })
     });
   } catch(e) { console.warn('Push event error:', e); }
+  // Also save to Firestore notification collection so all users see it in the panel
+  saveNotificationForAll(type, title, body);
 }
 
 async function confirmReset() {
@@ -2453,7 +2264,7 @@ function isAbsentForDay(ds, name) {
 
 function absentBannerText(absent) {
   if (!absent.length) return '';
-  if (absent.length === 1) return absent[0] + ' non sara in macchinata';
+  if (absent.length === 1) return absent[0] + ' non sarà in macchinata';
   if (absent.length === 2) return absent[0] + ' e ' + absent[1] + ' non saranno in macchinata';
   return absent.slice(0,-1).join(', ') + ' e ' + absent[absent.length-1] + ' non saranno in macchinata';
 }
@@ -2508,7 +2319,7 @@ function openPresenceModal(ds) {
   const veh = getActiveVehicle(prof);
   const vehStr = veh ? ' - ' + veh.brand + ' ' + veh.model : '';
   document.getElementById('presenceModalTitle').textContent = dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()];
-  document.getElementById('presenceModalSub').textContent = 'Guida ' + driver + vehStr + ' - 07:45';
+  document.getElementById('presenceModalSub').textContent = 'Guida ' + driver + vehStr + ' · 07:45';
   renderPresenceModal(ds);
   // Show vehicle selector only if current user is the driver
   const isDriver = driver === currentUser;
@@ -2788,7 +2599,7 @@ function renderNotifList() {
     list.innerHTML = '<div class="notif-empty">Nessuna notifica</div>';
     return;
   }
-  const ICONS = { assenza:'🚗', cambio:'🔄', serale:'🚗', weekend:'☭' };
+  const ICONS = { assenza:'🙋', cambio:'🔄', serale:'🚗', weekend:'☭' };
   const BGS = { assenza:'#FEF0EE', cambio:'#F0F7F4', serale:'#F2F0EB', weekend:'#F2F0EB' };
   list.innerHTML = notifications.slice(0,30).map(function(n) {
     const icon = ICONS[n.type] || '🔔';
@@ -2829,17 +2640,19 @@ function closeNotifPanel() {
 }
 
 async function markAllRead() {
-  // Called on panel open - mark all as read silently
   const unread = notifications.filter(function(n) { return !n.read; });
   if (!unread.length) return;
   unread.forEach(function(n) { n.read = true; });
   updateNotifBadge();
   if (window._fsSetDoc && window._fsDoc && window._db) {
-    unread.forEach(async function(n) {
-      try {
-        await window._fsSetDoc(window._fsDoc(window._db, 'notifications', n.id), { read: true }, { merge: true });
-      } catch(e) {}
-    });
+    try {
+      const { writeBatch } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+      const batch = writeBatch(window._db);
+      unread.forEach(function(n) {
+        batch.update(window._fsDoc(window._db, 'notifications', n.id), { read: true });
+      });
+      await batch.commit();
+    } catch(e) { console.warn('markAllRead batch error', e); }
   }
 }
 
@@ -2917,7 +2730,8 @@ async function setActiveVehicle(idx) {
 
 async function removeVehicle(idx) {
   if (!currentUser) return;
-  if (!confirm('Rimuovere questo veicolo?')) return;
+  const ok = await showConfirm('Rimuovi veicolo', 'Vuoi rimuovere questo veicolo?', 'Rimuovi');
+  if (!ok) return;
   const profile = window.userProfiles[currentUser] || {};
   const vehicles = (profile.vehicles || []).filter((_, i) => i !== idx);
   if (vehicles.length > 0 && !vehicles.find(v => v.active)) vehicles[0].active = true;
@@ -2928,7 +2742,8 @@ async function removeVehicle(idx) {
 
 let editingVehicleIdx = null;
 
-function openVehicleModal(editIdx) {
+async function openVehicleModal(editIdx) {
+  await ensureCarDatabase();
   editingVehicleIdx = editIdx !== undefined ? editIdx : null;
   const isEdit = editingVehicleIdx !== null;
   document.getElementById('vehicleModalTitle').textContent = isEdit ? 'Modifica veicolo' : 'Aggiungi veicolo';
@@ -2971,7 +2786,7 @@ function openVehicleModal(editIdx) {
 }
 
 function editVehicle(idx) {
-  openVehicleModal(idx);
+  openVehicleModal(idx); // returns promise, fire-and-forget is fine for click handler
 }
 
 function onBrandChange() {
@@ -3030,7 +2845,7 @@ async function saveVehicle() {
   const year = document.getElementById('vYear').value;
   const consumption = parseFloat(document.getElementById('vConsumption').value);
   if (!brand || !model || isNaN(engineIdx) || !year || isNaN(consumption)) {
-    alert('Compila tutti i campi');
+    showToast('Compila tutti i campi', 'error');
     return;
   }
   const engineData = CAR_DATABASE[brand][model][engineIdx];
@@ -3305,6 +3120,7 @@ async function saveColor() {
   const user = colorModalForNewUser ? pendingUser : currentUser;
   await window._saveProfile(user, { colorId: selectedColorId });
   window.userProfiles[user] = { ...(window.userProfiles[user] || {}), colorId: selectedColorId };
+  invalidateColorCache();
   closeColorModal();
   if (colorModalForNewUser) {
     await loginUser(pendingUser);
