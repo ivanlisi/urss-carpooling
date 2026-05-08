@@ -2637,6 +2637,7 @@ function closeNotifPanel() {
   notifPanelOpen = false;
   document.getElementById('notifPanel').classList.remove('open');
   document.getElementById('notifOverlay').classList.remove('open');
+  updateBodyLock();
 }
 
 async function markAllRead() {
