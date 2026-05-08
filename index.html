@@ -2612,6 +2612,8 @@ function renderPresenceModal(ds) {
     html += '</div>';
 
     if (isMe) {
+      // If I am the driver, no pill needed
+      if (isDriver) { html += '</div>'; return; }
       const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
       const badgeTxt = absent ? 'non ci sono' : 'ci sono';
       html += '<div style="position:relative">';
