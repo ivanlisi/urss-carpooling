@@ -10,8 +10,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="URSS">
-<meta name="theme-color" content="#6B1F1F">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 html {
   background: #6B1F1F;
@@ -1547,10 +1545,12 @@ function getActiveVehicle(profile) {
 }
 
 window.exceptions = window.exceptions || {};
-let exceptions = window.exceptions; // dateStr -> { note, driver }
-window.userProfiles = {}; // userId -> { color, pin, name }
-let absences = []; // [{person, from, to}]
+let exceptions = window.exceptions;
+window.userProfiles = {};
+let absences = [];
 let turnCounts = { Ivan: 0, Ilaria: 0, Dervis: 0, Filippo: 0 };
+let turniCompletati = {};
+let resetDate = '2026-01-01';
 
 // Count working days between two dates (exclusive of start, inclusive of end if forward)
 function countWorkingDays(from, to) {
@@ -1784,9 +1784,7 @@ function changeMonth(dir) {
 }
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
-// turniCompletati: { 'YYYY-MM-DD': 'NomeGuidatore' }
-let turniCompletati = {};
-let resetDate = '2026-04-27';
+// turniCompletati: { 'YYYY-MM-DD': driver | {driver, vehicleIdx} }
 
 function renderSavingsSection() {
   const savingsEl = document.getElementById('savingsSection');
@@ -2444,7 +2442,7 @@ function renderPresenceModal(ds) {
       // Don't show pill for the driver (they're driving, of course they're there)
       if (isDriver) { html += '</div>'; return; }
       const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
-      const badgeTxt2 = absent ? 'non ci sara' : 'presente';
+      const badgeTxt2 = absent ? 'non ci sarà' : 'presente';
       html += '<span class="' + badgeCls2 + '">' + badgeTxt2 + '</span>';
     }
     html += '</div>';
@@ -2487,7 +2485,6 @@ async function confirmSwap() {
   pendingSwapDs = null;
   pendingSwapDriver = null;
   originalDriver = null;
-  document.getElementById('presenceModalActions').style.display = 'none';
   // Save to Firestore
   if (window._fsSetDoc && window._fsDoc && window._db) {
     try {
@@ -2663,12 +2660,15 @@ async function deleteAllNotifications() {
   notifications = [];
   updateNotifBadge();
   renderNotifList();
-  if (window._fsDeleteDoc && window._fsDoc && window._db) {
-    toDelete.forEach(async function(n) {
-      try {
-        await window._fsDeleteDoc(window._fsDoc(window._db, 'notifications', n.id));
-      } catch(e) {}
-    });
+  if (window._db) {
+    try {
+      const { writeBatch } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+      const batch = writeBatch(window._db);
+      toDelete.forEach(function(n) {
+        batch.delete(window._fsDoc(window._db, 'notifications', n.id));
+      });
+      await batch.commit();
+    } catch(e) { console.warn('deleteAllNotifications batch error', e); }
   }
 }
 
@@ -3281,7 +3281,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
-  if (name==='statistiche') { renderStats(); loadTurniCompletati(); }
+  if (name==='statistiche') { renderStats(); }
   if (name==='calendario') { renderCalendar(); renderAbsences(); }
   if (name==='profilo') renderProfilePage();
 }
@@ -3289,13 +3289,10 @@ function switchTab(name, btn) {
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
   await window._loadProfiles();
-  // Set up real-time listeners (they will trigger renders automatically)
   if (window._loadExceptions) window._loadExceptions();
   if (window._loadAbsences) window._loadAbsences();
   if (window._loadPresencesRT) window._loadPresencesRT();
-  // Initial render with any cached data
   loadFuelPrices();
-  loadPresences();
   renderHero();
   renderTurnList();
   renderCalendar();
