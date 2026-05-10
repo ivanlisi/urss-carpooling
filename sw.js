@@ -4,8 +4,8 @@ self.addEventListener('push', function(event) {
   try { data = event.data.json(); } catch(e) { data = { title: event.data.text(), body: '' }; }
 
   event.waitUntil(
-    self.registration.showNotification('from URSS', {
-      body: data.title || data.body || '',
+    self.registration.showNotification(data.title || 'URSS', {
+      body: data.body || '',
       icon: '/urss-icon.png',
       badge: '/urss-icon.png',
       vibrate: [200, 100, 200],
