@@ -2267,43 +2267,24 @@ function absentBannerText(absent) {
   return absent.slice(0,-1).join(', ') + ' e ' + absent[absent.length-1] + ' non saranno in macchinata';
 }
 
-async function togglePresence(ds, isPresent) {
+// Called when user selects presente/non presente from dropdown — local only until Confirm
+function selectPresence(ds, isPresent) {
   if (!currentUser) return;
   document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
   if (!presences[ds]) presences[ds] = {};
   presences[ds][currentUser] = isPresent;
   window.presences = presences;
-  if (window._fsSetDoc && window._fsDoc && window._db) {
-    try {
-      await window._fsSetDoc(window._fsDoc(window._db, 'presences', ds), presences[ds]);
-    } catch(e) { console.warn('Presence save error', e); }
+  // Mark that there's a pending presence change
+  if (!pendingSwapDs) {
+    pendingPresenceDs = ds;
+    pendingPresenceValue = isPresent;
   }
   renderTurnList();
   renderCalendar();
   renderPresenceModal(ds);
-  if (!isPresent) {
-    // Build date-aware notification text
-    const now = new Date();
-    const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
-    const italianNow = new Date(now.getTime() + italianOffset * 3600000);
-    const todayStr = italianNow.toISOString().slice(0,10);
-    const tomorrowDate = new Date(italianNow);
-    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
-    const tomorrowStr = tomorrowDate.toISOString().slice(0,10);
-    const dayNames = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-    const monthNames = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-    let datePrefix;
-    if (ds === tomorrowStr) {
-      datePrefix = 'Domani';
-    } else {
-      const d = new Date(ds + 'T00:00:00Z');
-      datePrefix = dayNames[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthNames[d.getUTCMonth()];
-    }
-    const absent = [currentUser];
-    const who = absent.length === 1 ? absent[0] : absent.slice(0,-1).join(', ') + ' e ' + absent[absent.length-1];
-    const verb = absent.length === 1 ? 'non sarà' : 'non saranno';
-    sendPushToAll('assenza', datePrefix + ' ' + who + ' ' + verb + ' in macchinata', '');
-  }
+  // Enable confirm button
+  const btn = document.getElementById('presenceConfirmBtn');
+  if (btn) { btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; }
 }
 
 function openPresenceModal(ds) {
@@ -2424,7 +2405,7 @@ function renderPresenceModal(ds) {
       // If I am the driver, no pill needed
       if (isDriver) { html += '</div>'; return; }
       const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
-      const badgeTxt = absent ? 'non ci sono' : 'ci sono';
+      const badgeTxt = absent ? 'non presente' : 'presente';
       html += '<div style="position:relative">';
       if (isPast) {
         html += '<div class="' + badgeCls + '" style="opacity:0.5;cursor:default">' + badgeTxt + '</div>';
@@ -2433,8 +2414,8 @@ function renderPresenceModal(ds) {
         html += '<div class="presence-dropdown" id="presenceDrop_' + ds + '" style="display:none">';
         const activeYes = !absent ? 'active' : '';
         const activeNo = absent ? 'active' : '';
-        html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="togglePresence(&quot;' + ds + '&quot;, true)">Ci sono</div>';
-        html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="togglePresence(&quot;' + ds + '&quot;, false)">Non ci sono</div>';
+        html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="selectPresence(&quot;' + ds + '&quot;, true)">Presente</div>';
+        html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="selectPresence(&quot;' + ds + '&quot;, false)">Non presente</div>';
         html += '</div>';
       }
       html += '</div>';
@@ -2456,13 +2437,13 @@ function renderPresenceModal(ds) {
 let pendingSwapDs = null;
 let pendingSwapDriver = null;
 let originalDriver = null;
+let pendingPresenceDs = null;
+let pendingPresenceValue = null;
 
 function cancelSwapOrClose() {
   if (pendingSwapDs && originalDriver) {
-    // Restore original driver
     exceptions[pendingSwapDs] = exceptions[pendingSwapDs] || {};
     exceptions[pendingSwapDs].driver = originalDriver;
-    // Restore presence if changed
     if (presences[pendingSwapDs]) {
       presences[pendingSwapDs][currentUser] = true;
       window.presences = presences;
@@ -2473,30 +2454,53 @@ function cancelSwapOrClose() {
     const btn = document.getElementById('presenceConfirmBtn');
     if (btn) { btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none'; }
   }
+  // Restore pending presence change if cancelled
+  if (pendingPresenceDs !== null) {
+    if (presences[pendingPresenceDs]) {
+      presences[pendingPresenceDs][currentUser] = !pendingPresenceValue; // restore opposite
+      window.presences = presences;
+    }
+    pendingPresenceDs = null;
+    pendingPresenceValue = null;
+  }
   closePresenceModal();
 }
 
 function cancelSwap() { cancelSwapOrClose(); }
 
 async function confirmSwap() {
-  if (!pendingSwapDs || !pendingSwapDriver) { closePresenceModal(); return; }
-  const ds = pendingSwapDs;
+  const ds = pendingSwapDs || pendingPresenceDs;
+  if (!ds) { closePresenceModal(); return; }
+
+  const hasSwap = !!pendingSwapDs;
   const newDriver = pendingSwapDriver;
-  pendingSwapDs = null;
-  pendingSwapDriver = null;
-  originalDriver = null;
-  // Save to Firestore
-  if (window._fsSetDoc && window._fsDoc && window._db) {
+
+  // Save presence to Firestore
+  if (presences[ds]) {
+    try {
+      await window._fsSetDoc(window._fsDoc(window._db, 'presences', ds), presences[ds]);
+    } catch(e) { console.warn('Presence save error', e); }
+  }
+
+  // Save driver swap to Firestore
+  if (hasSwap) {
     try {
       await window._fsSetDoc(window._fsDoc(window._db, 'exceptions', ds), exceptions[ds], { merge: true });
     } catch(e) { console.warn('Swap save error', e); }
+    const d = new Date(ds + 'T00:00:00Z');
+    const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+    const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    sendPushToAll('cambio', dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ': guida ' + newDriver, '');
+    renderHero();
+    renderCalendar();
   }
-  renderHero();
-  renderCalendar();
-  const d = new Date(ds + 'T00:00:00Z');
-  const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
-  const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-  sendPushToAll('cambio', dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ': guida ' + newDriver, '');
+
+  pendingSwapDs = null;
+  pendingSwapDriver = null;
+  originalDriver = null;
+  pendingPresenceDs = null;
+  pendingPresenceValue = null;
+
   closePresenceModal();
 }
 
