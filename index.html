@@ -1745,7 +1745,7 @@ function renderTurnList() {
       const isModified = exceptions[ds] && exceptions[ds].driver && exceptions[ds].driver !== baseDriver;
       const note = exceptions[ds]?.note || '';
       const avatarStyle = isModified
-        ? `background: repeating-linear-gradient(45deg, ${c.bg} 0px, ${c.bg} 3px, ${c.mid} 3px, ${c.mid} 6px); color:${c.fg}`
+        ? `background: repeating-linear-gradient(45deg, transparent 0px, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 6px), ${c.hex || c.fg}; color:${c.fg}`
         : `background:${c.bg};color:${c.fg}`;
       const subText = isModified ? 'turno modificato' : (note || 'Via Tarkowskij · 07:45');
       const subStyle = isModified ? 'font-style:italic;color:var(--warn)' : '';
@@ -2440,7 +2440,7 @@ function renderPresenceModal(ds) {
     const isMe = name === currentUser;
     const isDriver = name === currentDriver;
     const avStyle = (isDriver && isModified)
-      ? 'background:repeating-linear-gradient(45deg,' + col.fg + '88 0px,' + col.fg + '88 3px,' + col.fg + ' 3px,' + col.fg + ' 6px);color:white'
+      ? 'background:repeating-linear-gradient(45deg, transparent 0px, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 6px), ' + (col.hex || col.fg) + ';color:' + col.fg
       : 'background:' + col.bg + ';color:' + col.fg;
     const driverBadge = isDriver ? ' <span style="font-size:9px;background:var(--primary);color:white;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500">GUIDA</span>' : '';
     const meTxt = isMe ? ' <span style="font-size:10px;color:var(--muted)">(tu)</span>' : '';
