@@ -1632,7 +1632,7 @@ function renderHero() {
   const col = getUserColor(driver);
   const note = exceptions[ds]?.note || '';
   const avatarStyle = isModified
-    ? `background: repeating-linear-gradient(45deg, ${col.hex || col.fg}88 0px, ${col.hex || col.fg}88 3px, ${col.hex || col.fg} 3px, ${col.hex || col.fg} 6px)`
+    ? `background: repeating-linear-gradient(45deg, ${col.bg} 0px, ${col.bg} 3px, ${col.mid} 3px, ${col.mid} 6px)`
     : `background:${col.hex || col.fg}`;
   const detailText = isModified
     ? `<span style="font-style:italic;opacity:0.85">turno modificato</span>`
