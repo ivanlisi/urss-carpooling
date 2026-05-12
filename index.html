@@ -2477,7 +2477,7 @@ function renderPresenceModal(ds) {
       // Don't show pill for the driver (they're driving, of course they're there)
       if (isDriver) { html += '</div>'; return; }
       const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
-      const badgeTxt2 = absent ? 'non ci sarà' : 'presente';
+      const badgeTxt2 = absent ? 'non presente' : 'presente';
       html += '<span class="' + badgeCls2 + '">' + badgeTxt2 + '</span>';
     }
     html += '</div>';
