@@ -92,9 +92,7 @@ body::after {
       });
       // Re-render on any change
       if (typeof renderTurnList === 'function') {
-        renderTurnList();
-        renderHero();
-        renderCalendar();
+        renderAll();
       }
     }, (e) => { console.warn('Firestore exceptions listener error', e); });
   };
@@ -136,9 +134,7 @@ body::after {
       }
       if (typeof renderAbsences === 'function') {
         renderAbsences();
-        renderTurnList();
-        renderHero();
-        renderCalendar();
+        renderAll();
       }
     }, (e) => { console.warn('Firestore absences listener error', e); });
   };
@@ -169,6 +165,8 @@ body::after {
   --text: #1A1A18;
   --muted: #7A7870;
   --border: #E0DDD6;
+  --primary: #9B3A3A;
+  --primary-dark: #6B1F1F;
   --accent: #2D6A4F;
   --accent-light: #F5DDD8;
   --accent-mid: #8B3A3A;
@@ -437,8 +435,8 @@ body {
 }
 
 .turn-card.today-turn {
-  border-color: #9B3A3A;
-  box-shadow: 0 0 0 1px #9B3A3A;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
 }
 
 .turn-row {
@@ -739,7 +737,7 @@ body.modal-open {
 }
 .pickup-check.checked {
   background: linear-gradient(180deg, #6B1F1F 0%, #9B3A3A 100%);
-  border-color: #9B3A3A;
+  border-color: var(--primary);
 }
 
 .note-input {
@@ -826,11 +824,11 @@ body.modal-open {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 8px; cursor: pointer;
 }
-.vehicle-card.active-v { border-color: #9B3A3A; box-shadow: 0 0 0 1px #9B3A3A; }
+.vehicle-card.active-v { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
 .vehicle-icon { width: 36px; height: 36px; background: var(--bg); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .vehicle-name { font-size: 14px; font-weight: 500; }
 .vehicle-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
-.vehicle-check { width: 20px; height: 20px; border-radius: 50%; background: #9B3A3A; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: auto; }
+.vehicle-check { width: 20px; height: 20px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: auto; }
 .vehicle-check-empty { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0; margin-left: auto; }
 .add-vehicle-btn { width: 100%; padding: 11px; background: none; border: 1px dashed var(--border); border-radius: var(--radius); font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; margin-bottom: 12px; }
 
@@ -903,7 +901,7 @@ body.modal-open {
 .notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 12px; border-bottom:0.5px solid var(--border); flex-shrink:0; background:var(--card); }
 .notif-scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 .notif-panel-title { font-size:15px; font-weight:500; }
-.notif-clear-btn { font-size:11px; color:#9B3A3A; cursor:pointer; background:none; border:none; font-family:inherit; }
+.notif-clear-btn { font-size:11px; color: var(--primary); cursor:pointer; background:none; border:none; font-family:inherit; }
 .notif-item { display:flex; align-items:flex-start; gap:10px; padding:11px 16px; border-bottom:0.5px solid var(--border); }
 .notif-item:last-child { border-bottom:none; }
 .notif-item.unread { background:#FFF8F5; }
@@ -942,7 +940,7 @@ body.modal-open {
   transition: transform 0.2s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
-.toggle-switch input:checked + .toggle-slider { background: #9B3A3A; }
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 .profile-header-card {
   background: var(--card); border: 1px solid var(--border);
@@ -1378,9 +1376,20 @@ function showConfirm(title, msg, okLabel) {
 }
 function _closeConfirmModal() {
   document.getElementById('genericConfirmModal').classList.remove('open'); updateBodyLock();
+  _confirmAccept = null;
+  _confirmReject = null;
 }
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
+
+// Notification type constants — prevents typos in code
+const NOTIF_TYPES = {
+  serale: 'serale',
+  mattina: 'mattina',
+  weekend: 'weekend',
+  assenza: 'assenza',
+  cambio: 'cambio'
+};
 
 const DRIVERS = ['Filippo','Dervis','Ivan','Ilaria'];
 const COLORS = {
@@ -1431,14 +1440,12 @@ function getUserColor(name) {
 // ── AUTH STATE ────────────────────────────────────────────────────────────────
 let currentUser = null; // name of logged in user
 
-function hashPin(pin) {
-  // Simple hash for PIN storage — not cryptographic but sufficient
-  let hash = 0;
-  for (let i = 0; i < pin.length; i++) {
-    hash = ((hash << 5) - hash) + pin.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash.toString(16);
+// PIN hashing with SHA-256 + salt (Web Crypto API)
+const PIN_SALT = 'urss-carpooling-v1';
+async function hashPin(pin) {
+  const data = new TextEncoder().encode(PIN_SALT + ':' + pin);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Holidays 2025–2026 + Patron of Cesena (24 giugno)
@@ -1516,11 +1523,41 @@ const ROUND_TRIP_KM = 49.8; // 24.9 km × 2
 // Default fuel prices fallback
 let fuelPrices = { benzina: 1.812, diesel: 1.689, gpl: 0.721, ibrido: 1.812, ibrido_plug: 1.812, elettrico: 0.25 };
 
+const FUEL_PRICES_TTL = 24 * 60 * 60 * 1000; // 24h
+
 async function loadFuelPrices() {
+  // Try cache first
+  try {
+    const cached = localStorage.getItem('urss_fuel_prices');
+    if (cached) {
+      const { ts, prices } = JSON.parse(cached);
+      if (Date.now() - ts < FUEL_PRICES_TTL && prices) {
+        fuelPrices = prices;
+        return; // fresh cache, skip network
+      }
+    }
+  } catch(e) {}
+
+  // Fetch fresh
   try {
     const res = await fetch('/fuel-prices');
-    if (res.ok) fuelPrices = await res.json();
-  } catch(e) { console.warn('Fuel prices fallback'); }
+    if (res.ok) {
+      fuelPrices = await res.json();
+      try {
+        localStorage.setItem('urss_fuel_prices', JSON.stringify({ ts: Date.now(), prices: fuelPrices }));
+      } catch(e) {}
+    }
+  } catch(e) {
+    // Fall back to stale cache if available
+    try {
+      const cached = localStorage.getItem('urss_fuel_prices');
+      if (cached) {
+        const { prices } = JSON.parse(cached);
+        if (prices) fuelPrices = prices;
+      }
+    } catch(e2) {}
+    console.warn('Fuel prices fallback to cache/default');
+  }
 }
 
 function calcSavings(vehicle, kmSaved) {
@@ -1614,6 +1651,32 @@ function getEffectiveDriver(date) {
 }
 
 // ── RENDER TODAY HERO ─────────────────────────────────────────────────────────
+// Batched render — multiple calls in same tick coalesce into single rAF
+let _renderScheduled = false;
+let _renderTargets = { hero: false, turnList: false, calendar: false, stats: false };
+function scheduleRender(targets) {
+  if (targets) {
+    if (targets.hero) _renderTargets.hero = true;
+    if (targets.turnList) _renderTargets.turnList = true;
+    if (targets.calendar) _renderTargets.calendar = true;
+    if (targets.stats) _renderTargets.stats = true;
+  } else {
+    _renderTargets.hero = _renderTargets.turnList = _renderTargets.calendar = _renderTargets.stats = true;
+  }
+  if (_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(() => {
+    _renderScheduled = false;
+    const t = _renderTargets;
+    _renderTargets = { hero: false, turnList: false, calendar: false, stats: false };
+    if (t.hero) renderHero();
+    if (t.turnList) renderTurnList();
+    if (t.calendar) renderCalendar();
+    if (t.stats) renderStats();
+  });
+}
+function renderAll() { scheduleRender(); }
+
 function renderHero() {
   const hero = document.getElementById('todayHero');
   let d = today;
@@ -1996,14 +2059,11 @@ function addAbsence() {
   if (window._saveAbsence) window._saveAbsence(newAbsence);
 
   // Push notification to all
-  sendPushToAll('assenza', '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
+  sendPushToAll(NOTIF_TYPES.assenza, '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
 
   clearAbsenceForm();
   renderAbsences();
-  renderStats();
-  renderTurnList();
-  renderHero();
-  renderCalendar();
+  renderAll();
 }
 
 function removeAbsence(i) {
@@ -2011,10 +2071,7 @@ function removeAbsence(i) {
   if (window._deleteAbsence) window._deleteAbsence(absence);
   absences.splice(i,1);
   renderAbsences();
-  renderStats();
-  renderTurnList();
-  renderHero();
-  renderCalendar();
+  renderAll();
 }
 
 function updateAbsenceGender(person) {
@@ -2078,15 +2135,13 @@ function saveSwap() {
     if (window._saveException) window._saveException(ds, exceptions[ds]);
   }
   closeSwapModal();
-  renderTurnList();
-  renderHero();
-  renderCalendar();
+  renderAll();
   if (currentSwapDate <= toDateStr(today)) saveTurnoOggi();
   // Notify others of turn change
   if (selectedCheck) {
     const changedDriver = selectedCheck.id.replace('driverCheck_','');
     const notifyDs = currentSwapDate || '';
-    if (notifyDs) sendPushToAll('cambio', `${currentUser} ha modificato il turno del ${notifyDs}: guida ${changedDriver}`, '');
+    if (notifyDs) sendPushToAll(NOTIF_TYPES.cambio, `${currentUser} ha modificato il turno del ${notifyDs}: guida ${changedDriver}`, '');
   }
 }
 
@@ -2146,7 +2201,7 @@ async function doResetPin() {
   closeConfirmPin();
   if (window._fsSetDoc && window._fsDoc && window._db) {
     try {
-      await window._fsSetDoc(window._fsDoc(window._db, 'profiles', name), { pin: hashPin('0000') }, { merge: true });
+      await window._fsSetDoc(window._fsDoc(window._db, 'profiles', name), { pin: await hashPin('0000') }, { merge: true });
     } catch(e) { console.warn('Reset PIN error', e); }
   }
 }
@@ -2279,8 +2334,7 @@ function selectPresence(ds, isPresent) {
     pendingPresenceDs = ds;
     pendingPresenceValue = isPresent;
   }
-  renderTurnList();
-  renderCalendar();
+  scheduleRender({turnList:true, calendar:true});
   renderPresenceModal(ds);
   // Enable confirm button
   const btn = document.getElementById('presenceConfirmBtn');
@@ -2388,7 +2442,7 @@ function renderPresenceModal(ds) {
     const avStyle = (isDriver && isModified)
       ? 'background:repeating-linear-gradient(45deg,' + col.fg + '88 0px,' + col.fg + '88 3px,' + col.fg + ' 3px,' + col.fg + ' 6px);color:white'
       : 'background:' + col.bg + ';color:' + col.fg;
-    const driverBadge = isDriver ? ' <span style="font-size:9px;background:#9B3A3A;color:white;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500">GUIDA</span>' : '';
+    const driverBadge = isDriver ? ' <span style="font-size:9px;background:var(--primary);color:white;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500">GUIDA</span>' : '';
     const meTxt = isMe ? ' <span style="font-size:10px;color:var(--muted)">(tu)</span>' : '';
 
     // Click on user row swaps driver (unless past departure or already the driver)
@@ -2490,9 +2544,8 @@ async function confirmSwap() {
     const d = new Date(ds + 'T00:00:00Z');
     const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
     const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-    sendPushToAll('cambio', dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ': guida ' + newDriver, '');
-    renderHero();
-    renderCalendar();
+    sendPushToAll(NOTIF_TYPES.cambio, dayN[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + monthN[d.getUTCMonth()] + ': guida ' + newDriver, '');
+    scheduleRender({hero:true, calendar:true});
   }
 
   pendingSwapDs = null;
@@ -2555,8 +2608,7 @@ async function loadPresences() {
     const snap = await window._fsGetDocs(window._fsColl(window._db, 'presences'));
     snap.forEach(function(doc) { presences[doc.id] = doc.data(); });
     window.presences = presences;
-    renderTurnList();
-    renderCalendar();
+    scheduleRender({turnList:true, calendar:true});
   } catch(e) { console.warn('Load presences error', e); }
 }
 
@@ -2994,7 +3046,7 @@ function updatePinDots(error = false) {
 async function handlePinComplete() {
   if (pinMode === 'login') {
     const profile = window.userProfiles[pendingUser];
-    if (hashPin(pinBuffer) === profile.pin) {
+    if (await hashPin(pinBuffer) === profile.pin) {
       await loginUser(pendingUser);
     } else {
       document.getElementById('pinError').textContent = 'PIN errato. Riprova.';
@@ -3014,7 +3066,7 @@ async function handlePinComplete() {
   } else if (pinMode === 'confirm') {
     if (pinBuffer === pinSetFirst) {
       // Save PIN and proceed to color selection
-      const hashedPin = hashPin(pinBuffer);
+      const hashedPin = await hashPin(pinBuffer);
       await window._saveProfile(pendingUser, { pin: hashedPin, name: pendingUser });
       window.userProfiles[pendingUser] = { ...(window.userProfiles[pendingUser] || {}), pin: hashedPin, name: pendingUser };
       document.getElementById('pinScreen').style.display = 'none';
@@ -3039,8 +3091,7 @@ async function loginUser(name) {
   document.getElementById('pinScreen').style.display = 'none';
   document.getElementById('whoScreen').style.display = 'none';
   updateTabLabel();
-  renderHero();
-  renderTurnList();
+  scheduleRender({hero:true, turnList:true});
   // Hide splash overlay
   const splash = document.getElementById('splashOverlay');
   if (splash) { splash.classList.add('hidden'); setTimeout(() => splash.remove(), 300); }
@@ -3065,10 +3116,11 @@ function logout() {
 async function showAuthFlow() {
   await window._loadProfiles();
   const saved = localStorage.getItem('urss_user');
-  if (saved && window.userProfiles[saved]) {
-    // Riconosci automaticamente senza PIN
+  // Validate: must be a known driver AND have a profile
+  if (saved && DRIVERS.includes(saved) && window.userProfiles[saved]) {
     await loginUser(saved);
   } else {
+    if (saved) localStorage.removeItem('urss_user'); // clean stale value
     showWhoScreen();
   }
 }
@@ -3131,9 +3183,7 @@ async function saveColor() {
     await loginUser(pendingUser);
   } else {
     renderProfilePage();
-    renderHero();
-    renderTurnList();
-    renderCalendar();
+    renderAll();
   }
 }
 
@@ -3157,7 +3207,7 @@ async function confirmChangePin() {
   const oldPin = document.getElementById('oldPin').value;
   const newPin = document.getElementById('newPin').value;
   const profile = window.userProfiles[currentUser];
-  if (hashPin(oldPin) !== profile.pin) {
+  if (await hashPin(oldPin) !== profile.pin) {
     document.getElementById('changePinError').textContent = 'PIN attuale errato';
     return;
   }
@@ -3165,7 +3215,7 @@ async function confirmChangePin() {
     document.getElementById('changePinError').textContent = 'Il nuovo PIN deve essere 4 cifre';
     return;
   }
-  const hashedPin = hashPin(newPin);
+  const hashedPin = await hashPin(newPin);
   await window._saveProfile(currentUser, { pin: hashedPin });
   window.userProfiles[currentUser].pin = hashedPin;
   closeChangePinModal();
@@ -3291,17 +3341,32 @@ function switchTab(name, btn) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+function _forceHideSplash() {
+  const splash = document.getElementById('splashOverlay');
+  if (splash && !splash.classList.contains('hidden')) {
+    splash.classList.add('hidden');
+    setTimeout(() => { try { splash.remove(); } catch(e) {} }, 300);
+  }
+}
+
 async function init() {
-  await window._loadProfiles();
-  if (window._loadExceptions) window._loadExceptions();
-  if (window._loadAbsences) window._loadAbsences();
-  if (window._loadPresencesRT) window._loadPresencesRT();
-  loadFuelPrices();
-  renderHero();
-  renderTurnList();
-  renderCalendar();
-  loadTurniCompletati();
-  showAuthFlow();
+  // Safety: hide splash after 5s no matter what
+  const splashTimeout = setTimeout(_forceHideSplash, 5000);
+  try {
+    await window._loadProfiles();
+    if (window._loadExceptions) window._loadExceptions();
+    if (window._loadAbsences) window._loadAbsences();
+    if (window._loadPresencesRT) window._loadPresencesRT();
+    loadFuelPrices();
+    renderAll();
+    loadTurniCompletati();
+    showAuthFlow();
+  } catch(e) {
+    console.error('init error', e);
+    _forceHideSplash();
+  } finally {
+    clearTimeout(splashTimeout);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => { setTimeout(init, 600); });
@@ -3316,8 +3381,7 @@ function scheduleHeroRefresh() {
   let msUntil = target - italianNow;
   if (msUntil < 0) msUntil += 24 * 60 * 60 * 1000; // tomorrow
   setTimeout(function() {
-    renderHero();
-    renderTurnList();
+    scheduleRender({hero:true, turnList:true});
   }, msUntil);
 }
 scheduleHeroRefresh();
