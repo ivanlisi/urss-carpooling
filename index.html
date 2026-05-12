@@ -2031,7 +2031,7 @@ function renderAbsences() {
     const c = getUserColor(a.person);
     html += `
       <div class="absence-card">
-        <div style="width:32px;height:32px;border-radius:50%;background:${c.bg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:13px">${a.person[0]}</div>
+        <div style="width:32px;height:32px;border-radius:50%;background:${c.hex || c.fg};color:white;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:13px">${a.person[0]}</div>
         <div class="absence-info">
           <div class="absence-name">${a.person}</div>
           <div class="absence-period">${formatDate(a.from)} → ${formatDate(a.to)}</div>
