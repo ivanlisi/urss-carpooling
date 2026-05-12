@@ -2441,7 +2441,7 @@ function renderPresenceModal(ds) {
     const isDriver = name === currentDriver;
     const avStyle = (isDriver && isModified)
       ? 'background:repeating-linear-gradient(45deg, transparent 0px, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 6px), ' + (col.hex || col.fg) + ';color:' + col.fg
-      : 'background:' + col.bg + ';color:' + col.fg;
+      : 'background:' + (col.hex || col.fg) + ';color:' + col.fg;
     const driverBadge = isDriver ? ' <span style="font-size:9px;background:var(--primary);color:white;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500">GUIDA</span>' : '';
     const meTxt = isMe ? ' <span style="font-size:10px;color:var(--muted)">(tu)</span>' : '';
 
