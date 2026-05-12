@@ -2,6 +2,15 @@
 // Proxies to the urss-daily-push Worker which has web-push npm
 
 export async function onRequestPost({ request, env }) {
+  // Origin check — only allow requests from the URSS app itself
+  const origin = request.headers.get('origin');
+  const ALLOWED_ORIGINS = ['https://urss.pages.dev'];
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const { type, title, body } = await request.json();
     const token = await getFirestoreToken(env);
@@ -63,10 +72,13 @@ export async function onRequestPost({ request, env }) {
   }
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions({ request }) {
+  const origin = request.headers.get('origin');
+  const ALLOWED_ORIGINS = ['https://urss.pages.dev'];
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
     }

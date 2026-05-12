@@ -6,12 +6,22 @@ const FALLBACK = {
   ibrido: 1.812, ibrido_plug: 1.812, elettrico: 0.25
 };
 
-export async function onRequestGet({ env }) {
+const ALLOWED_ORIGINS = ['https://urss.pages.dev'];
+const MIMIT_CSV_URL = 'https://www.mimit.gov.it/images/stories/carburanti/MediaRegionaleStradale.csv';
+const MIMIT_TIMEOUT_MS = 5000;
+
+function corsHeaders(request) {
+  const origin = request.headers.get('origin');
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': allowOrigin };
+}
+
+export async function onRequestGet({ request, env }) {
   try {
     const token = await getFirestoreToken(env);
     const projectId = env.FIREBASE_PROJECT_ID;
 
-    // Check Firestore cache
+    // Check Firestore cache (24h server-side)
     const cacheRes = await fetch(
       `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/config/fuel_prices`,
       { headers: { 'Authorization': `Bearer ${token}` } }
@@ -26,20 +36,22 @@ export async function onRequestGet({ env }) {
           const pricesField = cacheData.fields?.prices?.mapValue?.fields || {};
           Object.entries(pricesField).forEach(([k, v]) => { prices[k] = parseFloat(v.doubleValue || v.integerValue || 0); });
           if (Object.keys(prices).length > 0) {
-            return new Response(JSON.stringify(prices), {
-              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-            });
+            return new Response(JSON.stringify(prices), { headers: corsHeaders(request) });
           }
         }
       }
     }
 
-    // Try MIMIT
+    // Try MIMIT with timeout
     let prices = { ...FALLBACK };
     try {
-      const mimitRes = await fetch('https://www.mise.gov.it/images/exportCSV/png_nl.csv', {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), MIMIT_TIMEOUT_MS);
+      const mimitRes = await fetch(MIMIT_CSV_URL, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       if (mimitRes.ok) {
         const text = await mimitRes.text();
         let benzSum = 0, benzCount = 0, dieselSum = 0, dieselCount = 0;
@@ -57,7 +69,10 @@ export async function onRequestGet({ env }) {
         prices.ibrido = prices.benzina;
         prices.ibrido_plug = prices.benzina;
       }
-    } catch(e) { /* use fallback */ }
+    } catch(e) {
+      console.warn('MIMIT fetch failed:', e.name === 'AbortError' ? 'timeout' : e.message);
+      /* use fallback */
+    }
 
     // Save to Firestore cache
     const pricesFields = {};
@@ -76,14 +91,23 @@ export async function onRequestGet({ env }) {
       }
     );
 
-    return new Response(JSON.stringify(prices), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return new Response(JSON.stringify(prices), { headers: corsHeaders(request) });
   } catch (e) {
-    return new Response(JSON.stringify(FALLBACK), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    console.error('fuel-prices error:', e.message);
+    return new Response(JSON.stringify(FALLBACK), { headers: corsHeaders(request) });
   }
+}
+
+export async function onRequestOptions({ request }) {
+  const origin = request.headers.get('origin');
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
 }
 
 async function getFirestoreToken(env) {

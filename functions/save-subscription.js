@@ -1,10 +1,30 @@
 // Cloudflare Pages Function: save-subscription
 // Path: functions/save-subscription.js
 
+const ALLOWED_ORIGINS = ['https://urss.pages.dev'];
+const ALLOWED_USERS = ['Ivan', 'Ilaria', 'Dervis', 'Filippo'];
+
 export async function onRequestPost({ request, env }) {
+  // Origin check
+  const origin = request.headers.get('origin');
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const { subscription, userId } = await request.json();
-    if (!userId) return new Response('Missing userId', { status: 400 });
+    if (!userId || !ALLOWED_USERS.includes(userId)) {
+      return new Response(JSON.stringify({ error: 'Invalid userId' }), {
+        status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
+      });
+    }
+    if (!subscription) {
+      return new Response(JSON.stringify({ error: 'Missing subscription' }), {
+        status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
+      });
+    }
 
     // Save to Firestore via REST API
     const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/push_subscriptions/${userId}`;
@@ -13,30 +33,42 @@ export async function onRequestPost({ request, env }) {
     const body = {
       fields: {
         userId: { stringValue: userId },
-        subscription: { stringValue: subscription ? JSON.stringify(subscription) : '' },
+        subscription: { stringValue: JSON.stringify(subscription) },
         updatedAt: { stringValue: new Date().toISOString() }
       }
     };
 
-    await fetch(url + '?updateMask.fieldPaths=userId&updateMask.fieldPaths=subscription&updateMask.fieldPaths=updatedAt', {
+    const fsRes = await fetch(url + '?updateMask.fieldPaths=userId&updateMask.fieldPaths=subscription&updateMask.fieldPaths=updatedAt', {
       method: 'PATCH',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
 
+    if (!fsRes.ok) {
+      const err = await fsRes.text();
+      console.error('Firestore save failed:', fsRes.status, err);
+      return new Response(JSON.stringify({ ok: false, error: 'Save failed' }), {
+        status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
+      });
+    }
+
     return new Response(JSON.stringify({ ok: true }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
     });
   } catch (e) {
     console.error('save-subscription error:', e);
-    return new Response('Error', { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: 'Internal error' }), {
+      status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
+    });
   }
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions({ request }) {
+  const origin = request.headers.get('origin');
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
     }
