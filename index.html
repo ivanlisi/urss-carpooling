@@ -1928,7 +1928,7 @@ function renderSavingsSection() {
     '<div class="savings-hero">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
-          '<div class="turn-avatar" style="background:' + col.bg + ';color:' + col.fg + ';width:36px;height:36px">' + currentUser[0] + '</div>' +
+          '<div class="turn-avatar" style="background:' + (col.hex || col.fg) + ';color:' + col.fg + ';width:36px;height:36px">' + currentUser[0] + '</div>' +
           '<div style="font-size:16px;font-weight:500">' + currentUser + '</div>' +
         '</div>' +
       '</div>' +
@@ -1970,7 +1970,7 @@ function renderStats() {
     html += `
       <div class="stat-card">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <div style="width:28px;height:28px;border-radius:50%;background:${col.bg};color:${col.fg};display:flex;align-items:center;justify-content:center;font-size:12px;font-family:'Inter',sans-serif">${name[0]}</div>
+          <div style="width:28px;height:28px;border-radius:50%;background:${col.hex || col.fg};color:${col.fg};display:flex;align-items:center;justify-content:center;font-size:12px;font-family:'Inter',sans-serif">${name[0]}</div>
           <div class="stat-name" style="margin:0">${name}</div>
         </div>
         <div class="stat-count" style="color:${col.fg}">${counts[name]}</div>
@@ -2031,7 +2031,7 @@ function renderAbsences() {
     const c = getUserColor(a.person);
     html += `
       <div class="absence-card">
-        <div style="width:32px;height:32px;border-radius:50%;background:${c.hex || c.fg};color:white;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:13px">${a.person[0]}</div>
+        <div style="width:32px;height:32px;border-radius:50%;background:${c.hex || c.fg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:13px">${a.person[0]}</div>
         <div class="absence-info">
           <div class="absence-name">${a.person}</div>
           <div class="absence-period">${formatDate(a.from)} → ${formatDate(a.to)}</div>
