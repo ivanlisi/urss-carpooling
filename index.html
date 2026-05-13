@@ -2713,7 +2713,6 @@ async function markAllRead() {
 async function deleteAllNotifications() {
   if (!notifications.length) return;
   const toDelete = [...notifications];
-  console.log('[delete] Cancellazione di', toDelete.length, 'notifiche, ids:', toDelete.map(n => n.id));
   notifications = [];
   updateNotifBadge();
   renderNotifList();
@@ -2725,15 +2724,14 @@ async function deleteAllNotifications() {
         batch.delete(window._fsDoc(window._db, 'notifications', n.id));
       });
       await batch.commit();
-      console.log('[delete] Batch commit OK');
-    } catch(e) { console.error('[delete] Batch error:', e.message, e); }
+    } catch(e) { console.warn('deleteAllNotifications batch error', e); }
   }
 }
 
 async function setupNotifListener() {
   if (!window._db || !currentUser) return;
   try {
-    const { collection, query, where, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+    const { collection, query, where, onSnapshot, getDocs } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
     const q = query(collection(window._db, 'notifications'), where('userId', '==', currentUser));
     onSnapshot(q, function(snap) {
       notifications = [];
@@ -2741,6 +2739,20 @@ async function setupNotifListener() {
       notifications.sort(function(a,b) { return b.ts.localeCompare(a.ts); });
       updateNotifBadge();
       if (notifPanelOpen) renderNotifList();
+    });
+
+    // iOS PWA suspends background tabs aggressively → listener may be stale on resume.
+    // Force a fresh re-fetch when the app returns to foreground.
+    document.addEventListener('visibilitychange', async function() {
+      if (document.visibilityState !== 'visible' || !currentUser) return;
+      try {
+        const fresh = await getDocs(q);
+        notifications = [];
+        fresh.forEach(function(doc) { notifications.push({ id: doc.id, ...doc.data() }); });
+        notifications.sort(function(a,b) { return b.ts.localeCompare(a.ts); });
+        updateNotifBadge();
+        if (notifPanelOpen) renderNotifList();
+      } catch(e) { console.warn('Notif refetch on foreground error', e); }
     });
   } catch(e) { console.warn('Notif listener error', e); }
 }
