@@ -2713,6 +2713,7 @@ async function markAllRead() {
 async function deleteAllNotifications() {
   if (!notifications.length) return;
   const toDelete = [...notifications];
+  console.log('[delete] Cancellazione di', toDelete.length, 'notifiche, ids:', toDelete.map(n => n.id));
   notifications = [];
   updateNotifBadge();
   renderNotifList();
@@ -2724,7 +2725,8 @@ async function deleteAllNotifications() {
         batch.delete(window._fsDoc(window._db, 'notifications', n.id));
       });
       await batch.commit();
-    } catch(e) { console.warn('deleteAllNotifications batch error', e); }
+      console.log('[delete] Batch commit OK');
+    } catch(e) { console.error('[delete] Batch error:', e.message, e); }
   }
 }
 
