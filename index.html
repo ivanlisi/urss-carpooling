@@ -2066,8 +2066,25 @@ function addAbsence() {
   renderAll();
 }
 
-function removeAbsence(i) {
+async function removeAbsence(i) {
   const absence = absences[i];
+  if (!absence) return;
+
+  // Permission check: only the owner or admin (Ivan) can delete
+  if (absence.person !== currentUser && currentUser !== 'Ivan') {
+    showToast(`Solo ${absence.person} può rimuovere questa assenza`, 'error');
+    return;
+  }
+
+  // Confirmation
+  const whose = absence.person === currentUser ? 'la tua assenza' : `l'assenza di ${absence.person}`;
+  const ok = await showConfirm(
+    'Rimuovi assenza',
+    `Vuoi rimuovere ${whose} dal ${formatDate(absence.from)} al ${formatDate(absence.to)}?`,
+    'Rimuovi'
+  );
+  if (!ok) return;
+
   if (window._deleteAbsence) window._deleteAbsence(absence);
   absences.splice(i,1);
   renderAbsences();
