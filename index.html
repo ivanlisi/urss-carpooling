@@ -2283,8 +2283,7 @@ async function sendPushToAll(type, title, body) {
       body: JSON.stringify({ type, title, body })
     });
   } catch(e) { console.warn('Push event error:', e); }
-  // Also save to Firestore notification collection so all users see it in the panel
-  saveNotificationForAll(type, title, body);
+  // Note: /send-push-event already saves the notification to Firestore for each user
 }
 
 async function confirmReset() {
@@ -2728,20 +2727,25 @@ async function markAllRead() {
 }
 
 async function deleteAllNotifications() {
-  if (!notifications.length) return;
-  const toDelete = [...notifications];
+  if (!notifications.length || !currentUser) return;
+  // Optimistic UI: clear locally first
   notifications = [];
   updateNotifBadge();
   renderNotifList();
-  if (window._db) {
-    try {
-      const { writeBatch } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
-      const batch = writeBatch(window._db);
-      toDelete.forEach(function(n) {
-        batch.delete(window._fsDoc(window._db, 'notifications', n.id));
-      });
-      await batch.commit();
-    } catch(e) { console.warn('deleteAllNotifications batch error', e); }
+  try {
+    const res = await fetch('/delete-notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUser })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('delete-notifications failed:', err);
+      showToast('Errore cancellazione notifiche', 'error');
+    }
+  } catch(e) {
+    console.warn('delete-notifications network error:', e);
+    showToast('Errore di rete', 'error');
   }
 }
 
