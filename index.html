@@ -3488,6 +3488,8 @@ function updateBodyLock() {
     // Notif panel
     var notifEl = document.getElementById('notifPanel');
     if (notifEl && notifEl.classList.contains('open')) {
+      // Don't intercept taps on interactive elements (buttons, links)
+      if (e.target.closest('button, a, input, select, textarea')) return;
       var r = notifEl.getBoundingClientRect();
       if (touch.clientY >= r.top && touch.clientY <= r.top + 70) {
         startY = touch.clientY; startTime = Date.now();
@@ -3502,6 +3504,8 @@ function updateBodyLock() {
     for (var i = 0; i < modals.length; i++) {
       var sheet = modals[i].querySelector('.modal-sheet');
       if (!sheet) continue;
+      // Don't intercept taps on interactive elements
+      if (e.target.closest('button, a, input, select, textarea')) return;
       var sr = sheet.getBoundingClientRect();
       if (touch.clientY >= sr.top && touch.clientY <= sr.top + 70) {
         startY = touch.clientY; startTime = Date.now();
