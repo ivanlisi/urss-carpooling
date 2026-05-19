@@ -2341,6 +2341,15 @@ function absentBannerText(absent) {
 // Called when user selects presente/non presente from dropdown — local only until Confirm
 function selectPresence(ds, isPresent) {
   if (!currentUser) return;
+  // Block presence changes after 07:30 on current day
+  const now = new Date();
+  const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
+  const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
+  const todayStr = italianNow.toISOString().slice(0,10);
+  if (ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 30)))) {
+    showToast('Troppo tardi per modificare la presenza', 'error');
+    return;
+  }
   document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
   if (!presences[ds]) presences[ds] = {};
   presences[ds][currentUser] = isPresent;
@@ -2437,12 +2446,13 @@ async function selectTurnVehicle(idx) {
 function renderPresenceModal(ds) {
   const list = document.getElementById('presenceList');
   if (!list) return;
-  // Disable after 07:45 Italian time
+  // Disable swap after 07:45, disable presence change after 07:30 (morning notification already sent)
   const now = new Date();
   const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
   const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
   const todayStr = italianNow.toISOString().slice(0,10);
   const isPast = ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 45)));
+  const isPresenceLocked = ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 30)));
 
   const d = new Date(ds + 'T00:00:00Z');
   const currentDriver = getEffectiveDriver(d);
@@ -2477,7 +2487,7 @@ function renderPresenceModal(ds) {
       const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
       const badgeTxt = absent ? 'non presente' : 'presente';
       html += '<div style="position:relative">';
-      if (isPast) {
+      if (isPresenceLocked) {
         html += '<div class="' + badgeCls + '" style="opacity:0.5;cursor:default">' + badgeTxt + '</div>';
       } else {
         html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown(&quot;' + ds + '&quot;)">' + badgeTxt + ' ▾</div>';
