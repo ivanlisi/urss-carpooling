@@ -20,15 +20,23 @@ export async function onRequestPost({ request, env }) {
         status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
       });
     }
-    if (!subscription) {
+    if (!subscription || !subscription.endpoint) {
       return new Response(JSON.stringify({ error: 'Missing subscription' }), {
         status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
       });
     }
 
-    // Save to Firestore via REST API
-    const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/push_subscriptions/${userId}`;
+    // Use a hash of the endpoint URL as the document ID. This allows the same
+    // user to have multiple active subscriptions (e.g. iPhone PWA + Safari +
+    // desktop), each stored as a separate document keyed by its own endpoint.
+    async function sha256Hex(str) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+    }
+    const docId = 's_' + (await sha256Hex(subscription.endpoint));
+
     const token = await getFirestoreToken(env);
+    const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/push_subscriptions/${docId}`;
 
     const body = {
       fields: {
@@ -52,7 +60,7 @@ export async function onRequestPost({ request, env }) {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, docId }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
     });
   } catch (e) {

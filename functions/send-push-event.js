@@ -12,7 +12,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   try {
-    const { type, title, body, eventId } = await request.json();
+    const { type, title, body } = await request.json();
     const token = await getFirestoreToken(env);
     const projectId = env.FIREBASE_PROJECT_ID;
 
@@ -44,7 +44,7 @@ export async function onRequestPost({ request, env }) {
       });
     }
 
-    // Get all subscriptions
+    // Get all subscriptions (now keyed by endpoint hash, with userId as field)
     const subsRes = await fetch(
       `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/push_subscriptions`,
       { headers: { 'Authorization': `Bearer ${token}` } }
@@ -64,33 +64,56 @@ export async function onRequestPost({ request, env }) {
     });
 
     const results = [];
+    const usersNotified = new Set(); // Track which users have had their notification saved
+    const deadSubs = [];
+
     for (const doc of subscriptions) {
-      const userId = doc.name.split('/').pop();
+      const docId = doc.name.split('/').pop();
+      // Support both new schema (userId field) and legacy schema (id = userId)
+      const userId = doc.fields?.userId?.stringValue || docId;
       const subStr = doc.fields?.subscription?.stringValue;
       if (!subStr) continue;
       const prefs = profiles[userId]?.notifPrefs?.mapValue?.fields;
       if (prefs?.serale?.booleanValue === false) continue;
 
       try {
-        // Call the Worker that has web-push
         const workerRes = await fetch('https://urss-daily-push.ivan-lisi-1983.workers.dev/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subscription: JSON.parse(subStr), title, body })
         });
         if (workerRes.ok) {
-          await saveNotification(token, projectId, userId, type, title, body);
-          results.push({ user: userId, ok: true });
+          // Save notification once per user even if they have multiple subscriptions
+          if (!usersNotified.has(userId)) {
+            await saveNotification(token, projectId, userId, type, title, body);
+            usersNotified.add(userId);
+          }
+          results.push({ docId, user: userId, ok: true });
         } else {
           const err = await workerRes.text();
-          results.push({ user: userId, ok: false, error: err });
+          // 410 Gone / 404 Not Found = subscription dead, mark for cleanup
+          if (workerRes.status === 410 || workerRes.status === 404 || /410|404|Gone|expired/i.test(err)) {
+            deadSubs.push(docId);
+          }
+          results.push({ docId, user: userId, ok: false, status: workerRes.status, error: err });
         }
       } catch (e) {
-        results.push({ user: userId, ok: false, error: e.message });
+        results.push({ docId, user: userId, ok: false, error: e.message });
       }
     }
 
-    return new Response(JSON.stringify({ sent: results.length, results }), {
+    // Cleanup dead subscriptions
+    for (const docId of deadSubs) {
+      try {
+        await fetch(
+          `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/push_subscriptions/${docId}`,
+          { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        console.log('[send-push-event] cleaned dead subscription:', docId);
+      } catch(e) { console.warn('Failed to delete dead sub', docId, e.message); }
+    }
+
+    return new Response(JSON.stringify({ sent: results.length, cleaned: deadSubs.length, results }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   } catch (e) {
