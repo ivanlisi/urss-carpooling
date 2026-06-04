@@ -12,9 +12,26 @@ export async function onRequestPost({ request, env }) {
   }
 
   try {
-    const { type, title, body } = await request.json();
+    const { type, title, body, eventId } = await request.json();
     const token = await getFirestoreToken(env);
     const projectId = env.FIREBASE_PROJECT_ID;
+
+    // Idempotency: if the client provided an eventId, try to claim it as a Firestore doc.
+    // If it already exists (409 conflict), this is a duplicate invocation — return ok without sending.
+    if (eventId) {
+      const guardUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/push_guard?documentId=${encodeURIComponent(eventId)}`;
+      const guardRes = await fetch(guardUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { ts: { stringValue: new Date().toISOString() }, type: { stringValue: type || 'unknown' } } })
+      });
+      if (!guardRes.ok) {
+        console.log('[send-push-event] duplicate eventId blocked:', eventId);
+        return new Response(JSON.stringify({ ok: true, duplicate: true }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
+        });
+      }
+    }
 
     // Get all subscriptions
     const subsRes = await fetch(
