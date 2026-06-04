@@ -16,21 +16,32 @@ export async function onRequestPost({ request, env }) {
     const token = await getFirestoreToken(env);
     const projectId = env.FIREBASE_PROJECT_ID;
 
-    // Idempotency: if the client provided an eventId, try to claim it as a Firestore doc.
-    // If it already exists (409 conflict), this is a duplicate invocation — return ok without sending.
-    if (eventId) {
-      const guardUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/push_guard?documentId=${encodeURIComponent(eventId)}`;
-      const guardRes = await fetch(guardUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: { ts: { stringValue: new Date().toISOString() }, type: { stringValue: type || 'unknown' } } })
+    // Idempotency: dedupe by (type+title+body) content within a short window.
+    // Build a guard id from a hash of the content + truncated timestamp (minute precision).
+    // Two requests with the same content within the same minute will collide on the guard.
+    async function sha256Hex(str) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+    }
+    const minuteBucket = Math.floor(Date.now() / 60000); // 1-minute window
+    const contentHash = await sha256Hex(`${type}|${title}|${body}|${minuteBucket}`);
+    const guardId = `c_${contentHash}`;
+
+    const guardUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/push_guard?documentId=${encodeURIComponent(guardId)}`;
+    const guardRes = await fetch(guardUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        ts: { stringValue: new Date().toISOString() },
+        type: { stringValue: type || 'unknown' },
+        title: { stringValue: (title || '').slice(0, 200) }
+      } })
+    });
+    if (!guardRes.ok) {
+      console.log('[send-push-event] duplicate content blocked:', guardId, type, title);
+      return new Response(JSON.stringify({ ok: true, duplicate: true }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
       });
-      if (!guardRes.ok) {
-        console.log('[send-push-event] duplicate eventId blocked:', eventId);
-        return new Response(JSON.stringify({ ok: true, duplicate: true }), {
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin }
-        });
-      }
     }
 
     // Get all subscriptions
