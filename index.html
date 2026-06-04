@@ -1701,20 +1701,108 @@ function isAbsent(person, dateStr) {
   return absences.some(a => a.person===person && a.from<=dateStr && a.to>=dateStr);
 }
 
+// Determine effective driver for a given date by simulating the rotation from
+// the most recent anchor/checkpoint up to that date. When someone is absent on
+// a given day, they are simply skipped (the rotation index does NOT advance
+// for them on that day). When they return, they re-enter the rotation in
+// their original position.
 function getEffectiveDriver(date) {
-  const ds = toDateStr(date);
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  const ds = toDateStr(d);
+
+  // Manual exception always wins
   if (exceptions[ds] && exceptions[ds].driver) return exceptions[ds].driver;
-  const base = getDriverForDate(date);
-  // If absent, skip to next
-  if (isAbsent(base, ds)) {
-    // find next available
-    for (let i=1; i<4; i++) {
-      const alt = DRIVERS[(DRIVERS.indexOf(base)+i)%4];
-      if (!isAbsent(alt, ds)) return alt;
-    }
+
+  // Find the starting point: most recent checkpoint <= ds, or fall back to ANCHOR
+  const cp = findActiveCheckpoint(ds);
+  let startDate, startOrder;
+  if (cp) {
+    startDate = new Date(cp.date + 'T00:00:00');
+    startDate.setHours(0,0,0,0);
+    startOrder = cp.order;
+  } else {
+    startDate = new Date(ANCHOR);
+    startDate.setHours(0,0,0,0);
+    // Rebuild order starting from ANCHOR_DRIVER_IDX
+    startOrder = [];
+    for (let i = 0; i < 4; i++) startOrder.push(DRIVERS[(ANCHOR_DRIVER_IDX + i) % 4]);
   }
-  return base;
+
+  // If target date is before the start, fall back to anchor-only logic (no skipping)
+  if (d < startDate) {
+    const wd = countWorkingDays(ANCHOR, d);
+    if (d >= ANCHOR) return DRIVERS[(ANCHOR_DRIVER_IDX + wd) % 4];
+    return DRIVERS[((ANCHOR_DRIVER_IDX - wd) % 4 + 4) % 4];
+  }
+
+  // Walk forward day by day from startDate, advancing the rotation index only
+  // when the current driver is actually available (not absent).
+  // Helper: find the previous working day before a given date
+  function prevWorkingDay(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() - 1);
+    while (!isWorkDay(d)) d.setDate(d.getDate() - 1);
+    return toDateStr(d);
+  }
+
+  // idx always points to the next rotation slot to consider.
+  // When the person at idx is absent, we skip them WITHOUT consuming their slot:
+  // we pick the next available person and advance idx to just past them.
+  // The absent person's slot stays "reserved" — when they return, they get the turn.
+  let idx = 0;
+  const cursor = new Date(startDate);
+  while (cursor <= d) {
+    if (isWorkDay(cursor)) {
+      const cds = toDateStr(cursor);
+      const exDriver = exceptions[cds]?.driver;
+
+      if (exDriver) {
+        if (cursor.getTime() === d.getTime()) return exDriver;
+        idx = (idx + 1) % 4;
+        cursor.setDate(cursor.getDate() + 1);
+        continue;
+      }
+
+      // Check if anyone is "returning today" — was absent on the previous
+      // working day but present today. Their slot was preserved.
+      if (cursor.getTime() > startDate.getTime()) {
+        const prevDs = prevWorkingDay(cds);
+        const returners = DRIVERS.filter(n =>
+          isAbsent(n, prevDs) && !isAbsent(n, cds)
+        );
+        if (returners.length > 0) {
+          // Pick first in startOrder
+          const sortedReturners = returners.sort((a, b) =>
+            startOrder.indexOf(a) - startOrder.indexOf(b)
+          );
+          const chosen = sortedReturners[0];
+          if (cursor.getTime() === d.getTime()) return chosen;
+          // After returner's turn, keep idx where it was (the sub-cycle resumes naturally)
+          cursor.setDate(cursor.getDate() + 1);
+          continue;
+        }
+      }
+
+      // Find next available person from current idx
+      let tempIdx = idx;
+      let attempts = 0;
+      while (isAbsent(startOrder[tempIdx], cds) && attempts < 4) {
+        tempIdx = (tempIdx + 1) % 4;
+        attempts++;
+      }
+      if (cursor.getTime() === d.getTime()) return startOrder[tempIdx];
+      // Always advance idx to just past the served person
+      idx = (tempIdx + 1) % 4;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return startOrder[idx];
 }
+
+// getDriverForDate (above) returns the natural rotation IGNORING absences — used to
+// detect whether a day was modified by a manual exception or by the absence-skip logic.
 
 // ── RENDER TODAY HERO ─────────────────────────────────────────────────────────
 // Batched render — multiple calls in same tick coalesce into single rAF
@@ -2222,20 +2310,13 @@ async function addAbsence() {
     // Push notification to all
     sendPushToAll(NOTIF_TYPES.assenza, '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
 
-    // Add to local state FIRST so getEffectiveDriver sees the new absence during fairness calc
+    // Add to local state so getEffectiveDriver picks it up immediately
     absences.push(newAbsence);
 
-    // Fairness reorder: only for absences ≥ 5 working days
-    const workingDays = countWorkingDaysInclusive(from, to);
-    if (workingDays >= FAIRNESS_MIN_DAYS) {
-      try {
-        const checkpointDate = await applyFairnessReorder(person, from, to);
-        newAbsence.checkpointDate = checkpointDate;
-        showToast('Turni riorganizzati per il rientro');
-      } catch(e) {
-        console.warn('Fairness reorder error', e);
-      }
-    }
+    // Note: previously this triggered applyFairnessReorder to create a rotation
+    // checkpoint. The new getEffectiveDriver logic handles fairness automatically
+    // by skipping absent drivers without advancing the rotation index, so no
+    // checkpoint is needed.
 
     if (window._saveAbsence) await window._saveAbsence(newAbsence);
 
