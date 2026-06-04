@@ -2212,11 +2212,6 @@ function formatDate(ds) {
 }
 
 // ── FAIRNESS REORDER ON RETURN FROM LEAVE ────────────────────────────────────
-// When someone returns from a long absence (≥5 working days), the rotation
-// is reordered so that whoever drove most recently is placed farthest from
-// the return day, and the returner drives on day 1.
-const FAIRNESS_MIN_DAYS = 5;
-
 function countWorkingDaysInclusive(fromStr, toStr) {
   let count = 0;
   const d = new Date(fromStr + 'T00:00:00Z');
@@ -2226,69 +2221,6 @@ function countWorkingDaysInclusive(fromStr, toStr) {
     d.setUTCDate(d.getUTCDate() + 1);
   }
   return count;
-}
-
-function nextWorkingDay(fromStr) {
-  const d = new Date(fromStr + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + 1);
-  while (isWeekend(d) || isHoliday(d)) d.setUTCDate(d.getUTCDate() + 1);
-  return toDateStr(d);
-}
-
-// Returns "score" for a driver: how many working days have passed since their last
-// turn (effective driver, considering exceptions). Higher = drove less recently.
-// If never drove in the recent window, returns Infinity.
-function daysSinceLastTurn(name, refDateStr) {
-  const ref = new Date(refDateStr + 'T00:00:00Z');
-  let cursor = new Date(ref);
-  for (let i = 0; i < 60; i++) { // look back up to 60 days
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
-    if (!isWorkDay(cursor)) continue;
-    const ds = toDateStr(cursor);
-    const driver = getEffectiveDriver(cursor);
-    if (driver === name) {
-      // count working days between cursor and ref
-      return countWorkingDaysInclusive(toDateStr(cursor), refDateStr) - 1;
-    }
-  }
-  return Infinity;
-}
-
-// Count how many effective turns each driver had during a date range
-// (inclusive of fromStr and toStr). Working days only.
-function countTurnsInRange(name, fromStr, toStr) {
-  let count = 0;
-  const d = new Date(fromStr + 'T00:00:00Z');
-  const end = new Date(toStr + 'T00:00:00Z');
-  while (d <= end) {
-    if (isWorkDay(d) && getEffectiveDriver(d) === name) count++;
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return count;
-}
-
-async function applyFairnessReorder(returnee, absenceFromStr, absenceToStr) {
-  // Day 1 after return = returnee drives, and from then on the rotation is permanent
-  const returnDay = nextWorkingDay(absenceToStr);
-
-  // Other 3 members, ordered so that whoever drove LESS during the absence
-  // comes first (right after the returnee), and whoever drove MORE comes last.
-  // This balances the count: those who covered for the absent person get rest first.
-  const others = DRIVERS.filter(n => n !== returnee);
-  const ranked = others
-    .map(name => ({ name, turns: countTurnsInRange(name, absenceFromStr, absenceToStr) }))
-    .sort((a, b) => a.turns - b.turns) // ascending: fewer turns first
-    .map(x => x.name);
-
-  const newOrder = [returnee, ...ranked];
-
-  // Save as a rotation checkpoint
-  rotationCheckpoints[returnDay] = newOrder;
-  window.rotationCheckpoints = rotationCheckpoints;
-  if (window._saveRotationCheckpoint) {
-    try { await window._saveRotationCheckpoint(returnDay, newOrder); } catch(e) { console.warn('Checkpoint save error', e); }
-  }
-  return returnDay;
 }
 
 let _absenceSaving = false;
@@ -2312,11 +2244,6 @@ async function addAbsence() {
 
     // Add to local state so getEffectiveDriver picks it up immediately
     absences.push(newAbsence);
-
-    // Note: previously this triggered applyFairnessReorder to create a rotation
-    // checkpoint. The new getEffectiveDriver logic handles fairness automatically
-    // by skipping absent drivers without advancing the rotation index, so no
-    // checkpoint is needed.
 
     if (window._saveAbsence) await window._saveAbsence(newAbsence);
 
@@ -2519,12 +2446,12 @@ async function saveNotifPref(type, value) {
   if (value) {
     registerPush();
   } else {
-    // Remove subscription from Firestore
-    await fetch('/save-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: null, userId: currentUser })
-    }).catch(e => console.warn(e));
+    // Unsubscribe locally; the server will clean up the dead endpoint on next send.
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+    } catch(e) { console.warn('Unsubscribe error:', e); }
   }
 }
 
