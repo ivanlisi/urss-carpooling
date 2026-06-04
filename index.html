@@ -2166,18 +2166,30 @@ function daysSinceLastTurn(name, refDateStr) {
   return Infinity;
 }
 
-async function applyFairnessReorder(returnee, absenceToStr) {
+// Count how many effective turns each driver had during a date range
+// (inclusive of fromStr and toStr). Working days only.
+function countTurnsInRange(name, fromStr, toStr) {
+  let count = 0;
+  const d = new Date(fromStr + 'T00:00:00Z');
+  const end = new Date(toStr + 'T00:00:00Z');
+  while (d <= end) {
+    if (isWorkDay(d) && getEffectiveDriver(d) === name) count++;
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return count;
+}
+
+async function applyFairnessReorder(returnee, absenceFromStr, absenceToStr) {
   // Day 1 after return = returnee drives, and from then on the rotation is permanent
   const returnDay = nextWorkingDay(absenceToStr);
 
-  // Other 3 members, ordered by "drove least recently first"
+  // Other 3 members, ordered so that whoever drove LESS during the absence
+  // comes first (right after the returnee), and whoever drove MORE comes last.
+  // This balances the count: those who covered for the absent person get rest first.
   const others = DRIVERS.filter(n => n !== returnee);
-  // We compute score using the rotation as it stood BEFORE the new checkpoint is added.
-  // Since findActiveCheckpoint considers checkpoints <= dsTarget, looking backwards from
-  // (returnDay - 1) gives an answer based on the existing rotation (no recursion issue).
   const ranked = others
-    .map(name => ({ name, score: daysSinceLastTurn(name, returnDay) }))
-    .sort((a, b) => b.score - a.score) // larger score first = drove least recently first
+    .map(name => ({ name, turns: countTurnsInRange(name, absenceFromStr, absenceToStr) }))
+    .sort((a, b) => a.turns - b.turns) // ascending: fewer turns first
     .map(x => x.name);
 
   const newOrder = [returnee, ...ranked];
@@ -2188,7 +2200,6 @@ async function applyFairnessReorder(returnee, absenceToStr) {
   if (window._saveRotationCheckpoint) {
     try { await window._saveRotationCheckpoint(returnDay, newOrder); } catch(e) { console.warn('Checkpoint save error', e); }
   }
-  // Store the checkpoint date on the absence so we can clean it up if absence is deleted
   return returnDay;
 }
 
@@ -2211,11 +2222,14 @@ async function addAbsence() {
     // Push notification to all
     sendPushToAll(NOTIF_TYPES.assenza, '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
 
+    // Add to local state FIRST so getEffectiveDriver sees the new absence during fairness calc
+    absences.push(newAbsence);
+
     // Fairness reorder: only for absences ≥ 5 working days
     const workingDays = countWorkingDaysInclusive(from, to);
     if (workingDays >= FAIRNESS_MIN_DAYS) {
       try {
-        const checkpointDate = await applyFairnessReorder(person, to);
+        const checkpointDate = await applyFairnessReorder(person, from, to);
         newAbsence.checkpointDate = checkpointDate;
         showToast('Turni riorganizzati per il rientro');
       } catch(e) {
@@ -2223,7 +2237,6 @@ async function addAbsence() {
       }
     }
 
-    absences.push(newAbsence);
     if (window._saveAbsence) await window._saveAbsence(newAbsence);
 
     clearAbsenceForm();
