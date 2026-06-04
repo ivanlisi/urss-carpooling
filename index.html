@@ -2466,11 +2466,13 @@ async function saveNotificationForAll(type, title, body) {
 // Send push to all users with a specific pref enabled
 // Send push to all users and persist notifications in Firestore
 async function sendPushToAll(type, title, body) {
+  // Unique event id allows the server to deduplicate calls
+  const eventId = 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
   try {
     await fetch('/send-push-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, title, body })
+      body: JSON.stringify({ type, title, body, eventId })
     });
   } catch(e) { console.warn('Push event error:', e); }
   // Note: /send-push-event already saves the notification to Firestore for each user
