@@ -156,6 +156,37 @@ body::after {
     } catch(e) { console.warn('Firestore delete absence error', e); }
   };
 
+  // Rotation checkpoints: when a long absence ends, the rotation order is permanently
+  // reshuffled starting from that day. Each checkpoint document has id = date (YYYY-MM-DD)
+  // and a single field `order` = ["Driver1", "Driver2", "Driver3", "Driver4"].
+  window._loadRotationCheckpoints = async function() {
+    onSnapshot(collection(db, 'rotation_checkpoints'), (snap) => {
+      window.rotationCheckpoints = {};
+      rotationCheckpoints = {};
+      snap.forEach(d => {
+        const data = d.data();
+        if (Array.isArray(data.order) && data.order.length === 4) {
+          window.rotationCheckpoints[d.id] = data.order;
+          rotationCheckpoints[d.id] = data.order;
+        }
+      });
+      if (typeof renderAll === 'function') renderAll();
+    }, (e) => { console.warn('Rotation checkpoints listener error', e); });
+  };
+
+  window._saveRotationCheckpoint = async function(dateStr, order) {
+    try {
+      await setDoc(doc(db, 'rotation_checkpoints', dateStr), { order, createdAt: new Date().toISOString() });
+    } catch(e) { console.warn('Firestore save checkpoint error', e); }
+  };
+
+  window._deleteRotationCheckpoint = async function(dateStr) {
+    try {
+      const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
+      await deleteDoc(doc(db, 'rotation_checkpoints', dateStr));
+    } catch(e) { console.warn('Firestore delete checkpoint error', e); }
+  };
+
   // Loading handled by init() in main script
 </script>
 <style>
@@ -1612,9 +1643,44 @@ function countWorkingDays(from, to) {
   return count;
 }
 
+// Rotation checkpoints: map of YYYY-MM-DD → [Driver1, Driver2, Driver3, Driver4]
+// At each checkpoint date the rotation order is permanently reshuffled.
+window.rotationCheckpoints = window.rotationCheckpoints || {};
+let rotationCheckpoints = window.rotationCheckpoints;
+
+// Find the most recent checkpoint <= given date string. Returns { date, order } or null.
+function findActiveCheckpoint(dsTarget) {
+  const keys = Object.keys(rotationCheckpoints).filter(k => k <= dsTarget).sort();
+  if (!keys.length) return null;
+  const lastKey = keys[keys.length - 1];
+  return { date: lastKey, order: rotationCheckpoints[lastKey] };
+}
+
 function getDriverForDate(date) {
   const d = new Date(date);
   d.setHours(0,0,0,0);
+  const dsTarget = toDateStr(d);
+
+  // Check if there's an active checkpoint
+  const cp = findActiveCheckpoint(dsTarget);
+  if (cp) {
+    const cpDate = new Date(cp.date + 'T00:00:00');
+    cpDate.setHours(0,0,0,0);
+    // Working days between checkpoint date (inclusive) and target date (inclusive)
+    // cp.order[0] drives on the checkpoint date itself
+    let wd = 0;
+    if (d >= cpDate) {
+      const cursor = new Date(cpDate);
+      while (cursor < d) {
+        cursor.setDate(cursor.getDate() + 1);
+        if (!isWeekend(cursor) && !isHoliday(cursor)) wd++;
+      }
+      return cp.order[wd % 4];
+    }
+    // Should not happen since findActiveCheckpoint returns only checkpoints <= dsTarget
+  }
+
+  // Fallback to original anchor-based rotation
   const wd = countWorkingDays(ANCHOR, d);
   if (d >= ANCHOR) {
     return DRIVERS[(ANCHOR_DRIVER_IDX + wd) % 4];
@@ -2101,64 +2167,72 @@ function daysSinceLastTurn(name, refDateStr) {
 }
 
 async function applyFairnessReorder(returnee, absenceToStr) {
-  // Trigger only on absences ≥ FAIRNESS_MIN_DAYS working days
-  // (already validated by caller, but safe-guard here too)
-
-  // Day 1 after return = returnee drives
+  // Day 1 after return = returnee drives, and from then on the rotation is permanent
   const returnDay = nextWorkingDay(absenceToStr);
 
-  // Days 2, 3, 4 = the other 3 members, ordered by "drove least recently first"
+  // Other 3 members, ordered by "drove least recently first"
   const others = DRIVERS.filter(n => n !== returnee);
-  // Sort: most-recently-driven goes LAST (largest "daysSince" first = drove least recently first)
-  // We use score = daysSinceLastTurn computed at returnDay
+  // We compute score using the rotation as it stood BEFORE the new checkpoint is added.
+  // Since findActiveCheckpoint considers checkpoints <= dsTarget, looking backwards from
+  // (returnDay - 1) gives an answer based on the existing rotation (no recursion issue).
   const ranked = others
     .map(name => ({ name, score: daysSinceLastTurn(name, returnDay) }))
     .sort((a, b) => b.score - a.score) // larger score first = drove least recently first
     .map(x => x.name);
 
-  // Build target sequence over the next 4 working days starting from returnDay
-  const sequence = [returnee, ...ranked]; // [returnee, other1, other2, other3]
+  const newOrder = [returnee, ...ranked];
 
-  // Apply as exceptions on each of those 4 working days
-  let cursor = returnDay;
-  for (let i = 0; i < sequence.length; i++) {
-    if (i > 0) cursor = nextWorkingDay(cursor);
-    const target = sequence[i];
-    const baseDriver = getDriverForDate(new Date(cursor + 'T00:00:00Z'));
-    // Skip if it would be a no-op (target is already the natural driver and no exception exists)
-    if (target === baseDriver && !exceptions[cursor]) continue;
-    exceptions[cursor] = { ...(exceptions[cursor] || {}), driver: target, note: (exceptions[cursor]?.note || '') };
-    if (window._saveException) {
-      try { await window._saveException(cursor, exceptions[cursor]); } catch(e) {}
-    }
+  // Save as a rotation checkpoint
+  rotationCheckpoints[returnDay] = newOrder;
+  window.rotationCheckpoints = rotationCheckpoints;
+  if (window._saveRotationCheckpoint) {
+    try { await window._saveRotationCheckpoint(returnDay, newOrder); } catch(e) { console.warn('Checkpoint save error', e); }
   }
+  // Store the checkpoint date on the absence so we can clean it up if absence is deleted
+  return returnDay;
 }
 
-function addAbsence() {
+let _absenceSaving = false;
+async function addAbsence() {
+  if (_absenceSaving) return;
   const person = document.getElementById('absencePerson').value;
   const from = document.getElementById('absenceFrom').value;
   const to = document.getElementById('absenceTo').value;
   if (!from || !to) { showToast('Seleziona le date', 'error'); return; }
   if (from > to) { showToast('La data di fine deve essere dopo quella di inizio', 'error'); return; }
-  const newAbsence = { person, from, to, note: '' };
-  absences.push(newAbsence);
-  if (window._saveAbsence) window._saveAbsence(newAbsence);
 
-  // Push notification to all
-  sendPushToAll(NOTIF_TYPES.assenza, '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
+  _absenceSaving = true;
+  const saveBtn = document.querySelector('button.btn-primary[onclick*="addAbsence"]');
+  if (saveBtn) { saveBtn.style.opacity = '0.5'; saveBtn.style.pointerEvents = 'none'; }
 
-  // Fairness reorder: only for absences ≥ 5 working days
-  const workingDays = countWorkingDaysInclusive(from, to);
-  if (workingDays >= FAIRNESS_MIN_DAYS) {
-    applyFairnessReorder(person, to).then(() => {
-      showToast('Turni riorganizzati per il rientro');
-      renderAll();
-    }).catch(e => console.warn('Fairness reorder error', e));
+  try {
+    const newAbsence = { person, from, to, note: '' };
+
+    // Push notification to all
+    sendPushToAll(NOTIF_TYPES.assenza, '🏖 Assenza programmata', `${person} sarà assente dal ${formatDate(from)} al ${formatDate(to)}`);
+
+    // Fairness reorder: only for absences ≥ 5 working days
+    const workingDays = countWorkingDaysInclusive(from, to);
+    if (workingDays >= FAIRNESS_MIN_DAYS) {
+      try {
+        const checkpointDate = await applyFairnessReorder(person, to);
+        newAbsence.checkpointDate = checkpointDate;
+        showToast('Turni riorganizzati per il rientro');
+      } catch(e) {
+        console.warn('Fairness reorder error', e);
+      }
+    }
+
+    absences.push(newAbsence);
+    if (window._saveAbsence) await window._saveAbsence(newAbsence);
+
+    clearAbsenceForm();
+    renderAbsences();
+    renderAll();
+  } finally {
+    _absenceSaving = false;
+    if (saveBtn) { saveBtn.style.opacity = ''; saveBtn.style.pointerEvents = ''; }
   }
-
-  clearAbsenceForm();
-  renderAbsences();
-  renderAll();
 }
 
 async function removeAbsence(i) {
@@ -2181,6 +2255,14 @@ async function removeAbsence(i) {
   if (!ok) return;
 
   if (window._deleteAbsence) window._deleteAbsence(absence);
+  // If this absence had triggered a rotation checkpoint, remove it too
+  if (absence.checkpointDate) {
+    delete rotationCheckpoints[absence.checkpointDate];
+    window.rotationCheckpoints = rotationCheckpoints;
+    if (window._deleteRotationCheckpoint) {
+      try { await window._deleteRotationCheckpoint(absence.checkpointDate); } catch(e) {}
+    }
+  }
   absences.splice(i,1);
   renderAbsences();
   renderAll();
@@ -3497,6 +3579,7 @@ async function init() {
     if (window._loadExceptions) window._loadExceptions();
     if (window._loadAbsences) window._loadAbsences();
     if (window._loadPresencesRT) window._loadPresencesRT();
+    if (window._loadRotationCheckpoints) window._loadRotationCheckpoints();
     loadFuelPrices();
     renderAll();
     loadTurniCompletati();
