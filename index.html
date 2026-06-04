@@ -2546,9 +2546,26 @@ async function saveNotificationForAll(type, title, body) {
 
 // Send push to all users with a specific pref enabled
 // Send push to all users and persist notifications in Firestore
+// Dedup recent push events: if the exact same (type, title, body) was sent
+// within DEDUP_WINDOW_MS, silently skip the second call.
+const _recentPushes = new Map(); // key → timestamp
+const DEDUP_WINDOW_MS = 10000;
+
 async function sendPushToAll(type, title, body) {
-  // Unique event id allows the server to deduplicate calls
-  const eventId = 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  const key = type + '|' + title + '|' + body;
+  const now = Date.now();
+  // Cleanup old entries
+  for (const [k, ts] of _recentPushes) {
+    if (now - ts > DEDUP_WINDOW_MS) _recentPushes.delete(k);
+  }
+  if (_recentPushes.has(key)) {
+    console.log('[sendPushToAll] duplicate suppressed:', key);
+    return;
+  }
+  _recentPushes.set(key, now);
+
+  // Unique event id (server also dedupes via Firestore guard)
+  const eventId = 'evt_' + now + '_' + Math.random().toString(36).slice(2, 10);
   try {
     await fetch('/send-push-event', {
       method: 'POST',
@@ -2556,7 +2573,6 @@ async function sendPushToAll(type, title, body) {
       body: JSON.stringify({ type, title, body, eventId })
     });
   } catch(e) { console.warn('Push event error:', e); }
-  // Note: /send-push-event already saves the notification to Firestore for each user
 }
 
 async function confirmReset() {
