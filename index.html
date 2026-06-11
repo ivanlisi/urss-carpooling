@@ -1750,8 +1750,11 @@ function getEffectiveDriver(date) {
   // idx always points to the next rotation slot to consider.
   // When the person at idx is absent, we skip them WITHOUT consuming their slot:
   // we pick the next available person and advance idx to just past them.
-  // The absent person's slot stays "reserved" — when they return, they get the turn.
+  // The absent person's slot stays "reserved" — when they return, they get the
+  // turn on their first day back. That bonus turn CONSUMES their next slot in
+  // the rotation (tracked via pendingConsume), so they don't drive twice in a row.
   let idx = 0;
+  let pendingConsume = null;
   const cursor = new Date(startDate);
   while (cursor <= d) {
     if (isWorkDay(cursor)) {
@@ -1779,18 +1782,32 @@ function getEffectiveDriver(date) {
           );
           const chosen = sortedReturners[0];
           if (cursor.getTime() === d.getTime()) return chosen;
-          // After returner's turn, keep idx where it was (the sub-cycle resumes naturally)
+          // The bonus turn consumes the returner's next slot in the rotation
+          pendingConsume = chosen;
           cursor.setDate(cursor.getDate() + 1);
           continue;
         }
       }
 
-      // Find next available person from current idx
+      // Find next available person from current idx.
+      // Skip absentees AND (once) the person whose slot was consumed by a return bonus.
       let tempIdx = idx;
       let attempts = 0;
-      while (isAbsent(startOrder[tempIdx], cds) && attempts < 4) {
-        tempIdx = (tempIdx + 1) % 4;
-        attempts++;
+      while (attempts < 5) {
+        const cand = startOrder[tempIdx];
+        if (cand === pendingConsume) {
+          // Their slot is consumed by the earlier bonus turn — skip once
+          pendingConsume = null;
+          tempIdx = (tempIdx + 1) % 4;
+          attempts++;
+          continue;
+        }
+        if (isAbsent(cand, cds)) {
+          tempIdx = (tempIdx + 1) % 4;
+          attempts++;
+          continue;
+        }
+        break;
       }
       if (cursor.getTime() === d.getTime()) return startOrder[tempIdx];
       // Always advance idx to just past the served person
