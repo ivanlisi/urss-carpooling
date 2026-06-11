@@ -3009,6 +3009,9 @@ async function setupNotifListener() {
     // Force a fresh re-fetch when the app returns to foreground.
     document.addEventListener('visibilitychange', async function() {
       if (document.visibilityState !== 'visible' || !currentUser) return;
+      // The date may have changed while the app was suspended (e.g. overnight):
+      // re-render everything so expired absences disappear and today's hero updates.
+      try { renderAbsences(); renderAll(); } catch(e) {}
       try {
         const fresh = await getDocs(q);
         notifications = [];
@@ -3377,6 +3380,21 @@ async function loginUser(name) {
   setTimeout(registerPush, 1000);
   // Setup notification listener
   setTimeout(setupNotifListener, 800);
+  // Schedule a re-render at the next (Italian) midnight, then every 24h,
+  // so expired absences disappear and the hero rolls over without a reload.
+  scheduleMidnightRefresh();
+}
+
+let _midnightTimer = null;
+function scheduleMidnightRefresh() {
+  if (_midnightTimer) clearTimeout(_midnightTimer);
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24, 0, 30, 0); // 00:00:30 local time, small buffer past midnight
+  _midnightTimer = setTimeout(() => {
+    try { renderAbsences(); renderAll(); } catch(e) {}
+    scheduleMidnightRefresh();
+  }, next.getTime() - now.getTime());
 }
 
 function updateTabLabel() {
