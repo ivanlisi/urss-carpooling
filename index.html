@@ -594,6 +594,18 @@ body {
   line-height: 1;
 }
 
+.edit-btn {
+  background: none;
+  border: none;
+  color: var(--text-soft, #7A7870);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.edit-btn:hover { color: var(--accent, #4a7c59); }
+
 /* ADD ABSENCE FORM */
 .form-card {
   background: var(--card);
@@ -1706,6 +1718,20 @@ function isAbsent(person, dateStr) {
 // a given day, they are simply skipped (the rotation index does NOT advance
 // for them on that day). When they return, they re-enter the rotation in
 // their original position.
+// Determine the effective driver for a date using a mutable circular queue.
+//
+// Human model:
+//  - Everyone present rotates. Each working day, the driver is the first person
+//    in the queue who is present today; afterwards they move to the BACK.
+//  - When someone is absent on what would be their turn, they "miss" a turn
+//    (tracked) — the rotation simply continues with the present people.
+//  - When they come back (absent the previous working day, present today) and
+//    they have a missed turn, they drive that first day back as a courtesy.
+//    Priority among multiple returners: longest absence first, then queue order.
+//    After the courtesy drive they go to the BACK of the queue, re-entering the
+//    normal cycle behind everyone — so they don't drive twice in a row.
+//
+// Manual exceptions (swaps) always win for that specific day.
 function getEffectiveDriver(date) {
   const d = new Date(date);
   d.setHours(0,0,0,0);
@@ -1714,47 +1740,51 @@ function getEffectiveDriver(date) {
   // Manual exception always wins
   if (exceptions[ds] && exceptions[ds].driver) return exceptions[ds].driver;
 
-  // Find the starting point: most recent checkpoint <= ds, or fall back to ANCHOR
+  // Starting point: most recent checkpoint <= ds, or ANCHOR fallback
   const cp = findActiveCheckpoint(ds);
   let startDate, startOrder;
   if (cp) {
     startDate = new Date(cp.date + 'T00:00:00');
     startDate.setHours(0,0,0,0);
-    startOrder = cp.order;
+    startOrder = cp.order.slice();
   } else {
     startDate = new Date(ANCHOR);
     startDate.setHours(0,0,0,0);
-    // Rebuild order starting from ANCHOR_DRIVER_IDX
     startOrder = [];
     for (let i = 0; i < 4; i++) startOrder.push(DRIVERS[(ANCHOR_DRIVER_IDX + i) % 4]);
   }
 
-  // If target date is before the start, fall back to anchor-only logic (no skipping)
+  // Dates before the start: plain anchor rotation (no absence handling)
   if (d < startDate) {
     const wd = countWorkingDays(ANCHOR, d);
     if (d >= ANCHOR) return DRIVERS[(ANCHOR_DRIVER_IDX + wd) % 4];
     return DRIVERS[((ANCHOR_DRIVER_IDX - wd) % 4 + 4) % 4];
   }
 
-  // Walk forward day by day from startDate, advancing the rotation index only
-  // when the current driver is actually available (not absent).
-  // Helper: find the previous working day before a given date
-  function prevWorkingDay(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00');
-    d.setHours(0,0,0,0);
-    d.setDate(d.getDate() - 1);
-    while (!isWorkDay(d)) d.setDate(d.getDate() - 1);
-    return toDateStr(d);
+  // Working days (in lavorative) of the absence a person is returning from,
+  // i.e. the most recent absence that ended before `ds2`.
+  function absenceLenEndingBefore(name, ds2) {
+    const rel = absences.filter(a => a.person === name && a.to < ds2);
+    if (!rel.length) return 0;
+    rel.sort((a, b) => b.to.localeCompare(a.to));
+    const a = rel[0];
+    let c = 0;
+    const dd = new Date(a.from + 'T00:00:00'); dd.setHours(0,0,0,0);
+    const e = new Date(a.to + 'T00:00:00'); e.setHours(0,0,0,0);
+    while (dd <= e) { if (isWorkDay(dd)) c++; dd.setDate(dd.getDate() + 1); }
+    return c;
   }
 
-  // idx always points to the next rotation slot to consider.
-  // When the person at idx is absent, we skip them WITHOUT consuming their slot:
-  // we pick the next available person and advance idx to just past them.
-  // The absent person's slot stays "reserved" — when they return, they get the
-  // turn on their first day back. That bonus turn CONSUMES their next slot in
-  // the rotation (tracked via pendingConsume), so they don't drive twice in a row.
-  let idx = 0;
-  let pendingConsume = null;
+  function prevWorkingDay(dateStr) {
+    const dd = new Date(dateStr + 'T00:00:00');
+    dd.setHours(0,0,0,0);
+    dd.setDate(dd.getDate() - 1);
+    while (!isWorkDay(dd)) dd.setDate(dd.getDate() - 1);
+    return toDateStr(dd);
+  }
+
+  let order = startOrder.slice(); // mutable circular queue; front = next to drive
+  const missed = {}; DRIVERS.forEach(n => missed[n] = 0);
   const cursor = new Date(startDate);
   while (cursor <= d) {
     if (isWorkDay(cursor)) {
@@ -1763,59 +1793,47 @@ function getEffectiveDriver(date) {
 
       if (exDriver) {
         if (cursor.getTime() === d.getTime()) return exDriver;
-        idx = (idx + 1) % 4;
+        // A manual swap: move that driver to the back, keep the queue moving
+        order = order.filter(n => n !== exDriver);
+        order.push(exDriver);
         cursor.setDate(cursor.getDate() + 1);
         continue;
       }
 
-      // Check if anyone is "returning today" — was absent on the previous
-      // working day but present today. Their slot was preserved.
+      // Courtesy: a returner present today who missed a turn drives first.
+      let driver = null;
       if (cursor.getTime() > startDate.getTime()) {
-        const prevDs = prevWorkingDay(cds);
         const returners = DRIVERS.filter(n =>
-          isAbsent(n, prevDs) && !isAbsent(n, cds)
+          isAbsent(n, prevWorkingDay(cds)) && !isAbsent(n, cds) && missed[n] > 0
         );
         if (returners.length > 0) {
-          // Pick first in startOrder
-          const sortedReturners = returners.sort((a, b) =>
-            startOrder.indexOf(a) - startOrder.indexOf(b)
+          returners.sort((a, b) =>
+            (absenceLenEndingBefore(b, cds) - absenceLenEndingBefore(a, cds)) ||
+            (order.indexOf(a) - order.indexOf(b))
           );
-          const chosen = sortedReturners[0];
-          if (cursor.getTime() === d.getTime()) return chosen;
-          // The bonus turn consumes the returner's next slot in the rotation
-          pendingConsume = chosen;
-          cursor.setDate(cursor.getDate() + 1);
-          continue;
+          driver = returners[0];
+          missed[driver]--;
         }
       }
 
-      // Find next available person from current idx.
-      // Skip absentees AND (once) the person whose slot was consumed by a return bonus.
-      let tempIdx = idx;
-      let attempts = 0;
-      while (attempts < 5) {
-        const cand = startOrder[tempIdx];
-        if (cand === pendingConsume) {
-          // Their slot is consumed by the earlier bonus turn — skip once
-          pendingConsume = null;
-          tempIdx = (tempIdx + 1) % 4;
-          attempts++;
-          continue;
-        }
-        if (isAbsent(cand, cds)) {
-          tempIdx = (tempIdx + 1) % 4;
-          attempts++;
-          continue;
-        }
-        break;
+      if (!driver) {
+        // Normal: first present person in the queue. People skipped because absent
+        // (ahead of the chosen one in the queue) "miss" a turn.
+        let di = order.findIndex(n => !isAbsent(n, cds));
+        if (di < 0) di = 0; // everyone absent (shouldn't happen) — fallback
+        for (let k = 0; k < di; k++) missed[order[k]]++;
+        driver = order[di];
       }
-      if (cursor.getTime() === d.getTime()) return startOrder[tempIdx];
-      // Always advance idx to just past the served person
-      idx = (tempIdx + 1) % 4;
+
+      // Driver moves to the back of the queue
+      order = order.filter(n => n !== driver);
+      order.push(driver);
+
+      if (cursor.getTime() === d.getTime()) return driver;
     }
     cursor.setDate(cursor.getDate() + 1);
   }
-  return startOrder[idx];
+  return order[0];
 }
 
 // getDriverForDate (above) returns the natural rotation IGNORING absences — used to
@@ -2209,6 +2227,7 @@ function renderAbsences() {
   let html = '';
   visible.forEach(a => {
     const c = getUserColor(a.person);
+    const editIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
     html += `
       <div class="absence-card">
         <div style="width:32px;height:32px;border-radius:50%;background:${c.hex || c.fg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:13px">${a.person[0]}</div>
@@ -2216,10 +2235,48 @@ function renderAbsences() {
           <div class="absence-name">${a.person}</div>
           <div class="absence-period">${formatDate(a.from)} → ${formatDate(a.to)}</div>
         </div>
-        <button class="del-btn" onclick="removeAbsence(${a._idx})">×</button>
+        <button class="edit-btn" onclick="editAbsence(${a._idx})" title="Modifica">${editIcon}</button>
+        <button class="del-btn" onclick="removeAbsence(${a._idx})" title="Elimina">×</button>
       </div>`;
   });
   list.innerHTML = html;
+}
+
+// Edit an existing absence: load it into the form, then remove the old record so
+// the user can re-save with new dates. Uses the same permission check as deletion.
+async function editAbsence(i) {
+  const absence = absences[i];
+  if (!absence) return;
+  if (absence.person !== currentUser && currentUser !== 'Ivan') {
+    showToast(`Solo ${absence.person} può modificare questa assenza`, 'error');
+    return;
+  }
+  // Populate the form
+  const personSel = document.getElementById('absencePerson');
+  const fromInp = document.getElementById('absenceFrom');
+  const toInp = document.getElementById('absenceTo');
+  if (personSel) personSel.value = absence.person;
+  if (fromInp) { fromInp.value = absence.from; fromInp.classList.toggle('has-value', !!absence.from); }
+  if (toInp) { toInp.value = absence.to; toInp.classList.toggle('has-value', !!absence.to); }
+  if (typeof updateAbsenceGender === 'function') updateAbsenceGender(absence.person);
+
+  // Remove the old record (also cleans up any legacy checkpoint)
+  if (window._deleteAbsence) window._deleteAbsence(absence);
+  if (absence.checkpointDate) {
+    delete rotationCheckpoints[absence.checkpointDate];
+    window.rotationCheckpoints = rotationCheckpoints;
+    if (window._deleteRotationCheckpoint) {
+      try { await window._deleteRotationCheckpoint(absence.checkpointDate); } catch(e) {}
+    }
+  }
+  absences.splice(i, 1);
+  renderAbsences();
+  renderAll();
+
+  // Scroll the form into view and hint the user
+  const form = fromInp?.closest('.form-card');
+  if (form && form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showToast('Modifica le date e premi "Salva assenza"');
 }
 
 function formatDate(ds) {
