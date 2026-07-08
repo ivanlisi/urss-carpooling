@@ -1624,6 +1624,27 @@ function getActiveVehicle(profile) {
   return vehicles.find(v => v.active) || vehicles[0];
 }
 
+// Returns the vehicle that was active on a given date, using the dated history
+// (profile.vehicleHistory = [{from: 'YYYY-MM-DD', vehicle: {...}}, ...]).
+// Falls back to the currently active vehicle when no history covers the date
+// (e.g. profiles created before this feature existed).
+// Snapshot a vehicle without its 'active' flag (Firestore rejects undefined values)
+function vehicleSnapshot(v) {
+  if (!v) return null;
+  const { active, ...rest } = v;
+  return rest;
+}
+
+function getVehicleForDate(profile, ds) {
+  const hist = profile?.vehicleHistory || [];
+  const applicable = hist.filter(h => h.from <= ds && h.vehicle);
+  if (applicable.length) {
+    applicable.sort((a, b) => a.from.localeCompare(b.from));
+    return applicable[applicable.length - 1].vehicle;
+  }
+  return getActiveVehicle(profile);
+}
+
 window.exceptions = window.exceptions || {};
 let exceptions = window.exceptions;
 window.userProfiles = {};
@@ -2061,31 +2082,61 @@ function renderSavingsSection() {
   function isAbsentDay(ds) { return myAbsences.some(a => a.from <= ds && a.to >= ds); }
 
   const now = new Date();
-  const months = {};
+  const monthsCost = {};   // month → € saved (vehicle-aware)
+  const monthsKm = {};     // month → km saved
   let totalKmSaved = 0;
+  let totalCost = 0, totalFuel = 0, totalCo2 = 0;
 
   Object.entries(turniCompletati).forEach(([ds, turnData]) => {
     const driverName = typeof turnData === 'string' ? turnData : turnData.driver;
     if (!driverName || ds < resetDate) return;
     if (driverName === currentUser) return;
     if (isAbsentDay(ds)) return;
+    // Use the vehicle that was active ON THAT DAY: changing the main vehicle
+    // later must not rewrite past savings.
+    const dayVehicle = getVehicleForDate(profile, ds) || vehicle;
+    const s = calcSavings(dayVehicle, ROUND_TRIP_KM);
     totalKmSaved += ROUND_TRIP_KM;
+    totalCost += s.cost;
+    totalFuel += s.fuel;
+    totalCo2 += s.co2;
     const month = ds.slice(0, 7);
-    months[month] = (months[month] || 0) + ROUND_TRIP_KM;
+    monthsCost[month] = (monthsCost[month] || 0) + s.cost;
+    monthsKm[month] = (monthsKm[month] || 0) + ROUND_TRIP_KM;
   });
 
-  const savings = calcSavings(vehicle, totalKmSaved);
+  const savings = {
+    cost: Math.round(totalCost * 10) / 10,
+    fuel: Math.round(totalFuel * 10) / 10,
+    co2: Math.round(totalCo2 * 10) / 10,
+    unit: FUEL_UNIT[vehicle.fuel] || 'L'
+  };
   const currentMonthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const currentMonthKm = months[currentMonthKey] || 0;
-  const currentMonthSav = calcSavings(vehicle, currentMonthKm);
+  const currentMonthKm = monthsKm[currentMonthKey] || 0;
+  // Current-month figures: recompute fuel/co2 from the month's cost proportionally is
+  // fragile; instead accumulate them the same per-day way for the current month.
+  let cmCost = 0, cmFuel = 0, cmCo2 = 0;
+  Object.entries(turniCompletati).forEach(([ds, turnData]) => {
+    if (ds.slice(0,7) !== currentMonthKey) return;
+    const driverName = typeof turnData === 'string' ? turnData : turnData.driver;
+    if (!driverName || ds < resetDate || driverName === currentUser || isAbsentDay(ds)) return;
+    const dayVehicle = getVehicleForDate(profile, ds) || vehicle;
+    const s = calcSavings(dayVehicle, ROUND_TRIP_KM);
+    cmCost += s.cost; cmFuel += s.fuel; cmCo2 += s.co2;
+  });
+  const currentMonthSav = {
+    cost: Math.round(cmCost * 10) / 10,
+    fuel: Math.round(cmFuel * 10) / 10,
+    co2: Math.round(cmCo2 * 10) / 10,
+    unit: FUEL_UNIT[vehicle.fuel] || 'L'
+  };
 
   const MONTH_NAMES = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const monthLabels = [];
   for (let i = 3; i >= 0; i--) {
     const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = m.getFullYear() + '-' + String(m.getMonth()+1).padStart(2,'0');
-    const mKm = months[key] || 0;
-    monthLabels.push({ label: MONTH_NAMES[m.getMonth()], cost: calcSavings(vehicle, mKm).cost });
+    monthLabels.push({ label: MONTH_NAMES[m.getMonth()], cost: Math.round((monthsCost[key] || 0) * 10) / 10 });
   }
   const maxBar = Math.max(...monthLabels.map(m => m.cost), 1);
 
@@ -3117,10 +3168,26 @@ function renderVehicleCards(profile) {
 async function setActiveVehicle(idx) {
   if (!currentUser) return;
   const profile = window.userProfiles[currentUser] || {};
+  const oldActive = getActiveVehicle(profile);
   const vehicles = (profile.vehicles || []).map((v, i) => ({ ...v, active: i === idx }));
-  window.userProfiles[currentUser] = { ...profile, vehicles };
-  await window._saveProfile(currentUser, { vehicles });
+  const newActive = vehicles[idx];
+  const today = toDateStr(new Date());
+
+  // Dated history: past days keep the vehicle that was active back then.
+  let vehicleHistory = [...(profile.vehicleHistory || [])];
+  // First recorded switch: anchor the OLD vehicle from the stats reset date,
+  // so all past turns stay attributed to it.
+  if (!vehicleHistory.length && oldActive) {
+    vehicleHistory.push({ from: resetDate || '2026-01-01', vehicle: vehicleSnapshot(oldActive) });
+  }
+  // Replace any entry already recorded today (e.g. user switching back and forth)
+  vehicleHistory = vehicleHistory.filter(h => h.from !== today);
+  vehicleHistory.push({ from: today, vehicle: vehicleSnapshot(newActive) });
+
+  window.userProfiles[currentUser] = { ...profile, vehicles, vehicleHistory };
+  await window._saveProfile(currentUser, { vehicles, vehicleHistory });
   renderProfilePage();
+  renderSavingsSection();
 }
 
 async function removeVehicle(idx) {
@@ -3254,17 +3321,34 @@ async function saveVehicle() {
     consumption,
     year: parseInt(year),
   };
+  let vehicleHistory = [...(profile.vehicleHistory || [])];
+  const today = toDateStr(new Date());
+  const oldActive = getActiveVehicle(profile);
+
   if (editingVehicleIdx !== null) {
     // Edit mode — preserve active state
     vehicleData.active = vehicles[editingVehicleIdx]?.active || false;
     vehicles[editingVehicleIdx] = vehicleData;
+    // If the ACTIVE vehicle's data changed, the new figures apply from today;
+    // past savings keep the old figures via dated history.
+    if (vehicleData.active) {
+      if (!vehicleHistory.length && oldActive) {
+        vehicleHistory.push({ from: resetDate || '2026-01-01', vehicle: vehicleSnapshot(oldActive) });
+      }
+      vehicleHistory = vehicleHistory.filter(h => h.from !== today);
+      vehicleHistory.push({ from: today, vehicle: vehicleSnapshot(vehicleData) });
+    }
   } else {
     // Add mode
     vehicleData.active = vehicles.length === 0;
     vehicles.push(vehicleData);
+    // First vehicle ever: anchor it from the reset date
+    if (vehicleData.active && !vehicleHistory.length) {
+      vehicleHistory.push({ from: resetDate || '2026-01-01', vehicle: vehicleSnapshot(vehicleData) });
+    }
   }
-  window.userProfiles[currentUser] = { ...profile, vehicles };
-  await window._saveProfile(currentUser, { vehicles });
+  window.userProfiles[currentUser] = { ...profile, vehicles, vehicleHistory };
+  await window._saveProfile(currentUser, { vehicles, vehicleHistory });
   closeVehicleModal();
   renderProfilePage();
   renderSavingsSection();
