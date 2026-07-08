@@ -38,7 +38,7 @@ const CAR_DATABASE_DATA = {
   },
   "Dacia": {
     "Sandero": [{ engine: "1.0 SCe Benzina 75cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.0 TCe Benzina 90cv", fuel: "benzina", wltp: 5.7 },{ engine: "1.0 TCe GPL 100cv", fuel: "gpl", wltp: 6.8 }],
-    "Duster": [{ engine: "1.6 SCe Benzina 115cv", fuel: "benzina", wltp: 7.8 },{ engine: "1.3 TCe Benzina 130cv", fuel: "benzina", wltp: 7.2 },{ engine: "1.5 Blue dCi Diesel 115cv", fuel: "diesel", wltp: 5.5 },{ engine: "1.6 GPL 114cv", fuel: "gpl", wltp: 9.0 }],
+    "Duster": [{ engine: "1.6 SCe Benzina 115cv", fuel: "benzina", wltp: 7.8 },{ engine: "1.3 TCe Benzina 130cv", fuel: "benzina", wltp: 7.2 },{ engine: "1.5 Blue dCi Diesel 115cv", fuel: "diesel", wltp: 5.5 },{ engine: "1.6 GPL 114cv", fuel: "gpl", wltp: 9.0 },{ engine: "1.0 TCe ECO-G 100cv GPL", fuel: "gpl", wltp: 7.7 },{ engine: "1.2 ECO-G 120cv GPL", fuel: "gpl", wltp: 7.5 }],
     "Logan": [{ engine: "1.0 SCe Benzina 65cv", fuel: "benzina", wltp: 6.0 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 4.8 }],
     "Lodgy": [{ engine: "1.6 Benzina 85cv", fuel: "benzina", wltp: 7.5 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 5.5 }],
     "Dokker": [{ engine: "1.6 Benzina 85cv", fuel: "benzina", wltp: 7.5 },{ engine: "1.5 dCi Diesel 90cv", fuel: "diesel", wltp: 5.5 }],

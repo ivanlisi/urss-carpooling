@@ -3195,11 +3195,28 @@ async function removeVehicle(idx) {
   const ok = await showConfirm('Rimuovi veicolo', 'Vuoi rimuovere questo veicolo?', 'Rimuovi');
   if (!ok) return;
   const profile = window.userProfiles[currentUser] || {};
+  const removedWasActive = (profile.vehicles || [])[idx]?.active;
+  const oldActive = getActiveVehicle(profile);
   const vehicles = (profile.vehicles || []).filter((_, i) => i !== idx);
   if (vehicles.length > 0 && !vehicles.find(v => v.active)) vehicles[0].active = true;
-  window.userProfiles[currentUser] = { ...profile, vehicles };
-  await window._saveProfile(currentUser, { vehicles });
+
+  // If deleting the active vehicle promotes another one, record the change in the
+  // dated history so past savings stay attributed to the deleted vehicle.
+  let vehicleHistory = [...(profile.vehicleHistory || [])];
+  if (removedWasActive && vehicles.length > 0) {
+    const today = toDateStr(new Date());
+    const newActive = vehicles.find(v => v.active);
+    if (!vehicleHistory.length && oldActive) {
+      vehicleHistory.push({ from: resetDate || '2026-01-01', vehicle: vehicleSnapshot(oldActive) });
+    }
+    vehicleHistory = vehicleHistory.filter(h => h.from !== today);
+    vehicleHistory.push({ from: today, vehicle: vehicleSnapshot(newActive) });
+  }
+
+  window.userProfiles[currentUser] = { ...profile, vehicles, vehicleHistory };
+  await window._saveProfile(currentUser, { vehicles, vehicleHistory });
   renderProfilePage();
+  renderSavingsSection();
 }
 
 let editingVehicleIdx = null;
