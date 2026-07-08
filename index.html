@@ -1321,23 +1321,75 @@ body.modal-open {
     <div class="modal-handle" onclick="closeVehicleModal()" style="cursor:pointer"></div>
     <div class="modal-title" id="vehicleModalTitle">Aggiungi veicolo</div>
     <div style="margin-top:14px">
-      <div class="form-row">
-        <label class="form-label">Marca</label>
-        <select id="vBrand" onchange="onBrandChange()">
-          <option value="">Seleziona marca...</option>
-        </select>
+      <div id="vDbFields">
+        <div class="form-row">
+          <label class="form-label">Marca</label>
+          <select id="vBrand" onchange="onBrandChange()">
+            <option value="">Seleziona marca...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Modello</label>
+          <select id="vModel" onchange="onModelChange()" disabled>
+            <option value="">Seleziona modello...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Motore</label>
+          <select id="vEngine" onchange="onEngineChange()" disabled>
+            <option value="">Seleziona motore...</option>
+          </select>
+        </div>
       </div>
-      <div class="form-row">
-        <label class="form-label">Modello</label>
-        <select id="vModel" onchange="onModelChange()" disabled>
-          <option value="">Seleziona modello...</option>
-        </select>
+      <div id="vManualFields" style="display:none">
+        <div class="form-row">
+          <label class="form-label">Cerca il tuo veicolo online</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="vSmartQuery" placeholder="es. Dacia Duster ECO-G 120 GPL"
+              style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
+            <button type="button" id="vSmartBtn" onclick="smartVehicleLookup()"
+              style="background:var(--accent,#4a7c59);color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;cursor:pointer;white-space:nowrap">Cerca</button>
+          </div>
+          <div id="vSmartStatus" style="display:none;margin-top:6px;font-size:12px;color:var(--muted)"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-row">
+            <label class="form-label">Marca</label>
+            <input type="text" id="vBrandManual" placeholder="es. Dacia"
+              style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Modello</label>
+            <input type="text" id="vModelManual" placeholder="es. Duster"
+              style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Motore (descrizione)</label>
+          <input type="text" id="vEngineManual" placeholder="es. 1.2 ECO-G 120cv"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-row">
+            <label class="form-label">Alimentazione</label>
+            <select id="vFuelManual">
+              <option value="benzina">Benzina</option>
+              <option value="diesel">Diesel</option>
+              <option value="gpl">GPL</option>
+              <option value="ibrido">Ibrido</option>
+              <option value="ibrido_plug">Ibrido plug-in</option>
+              <option value="elettrico">Elettrico</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Consumo WLTP</label>
+            <input type="number" id="vWltpManual" step="0.1" min="0.5" max="30" placeholder="es. 7.5"
+              style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
+          </div>
+        </div>
       </div>
-      <div class="form-row">
-        <label class="form-label">Motore</label>
-        <select id="vEngine" onchange="onEngineChange()" disabled>
-          <option value="">Seleziona motore...</option>
-        </select>
+      <div style="text-align:center;margin:4px 0 10px">
+        <a id="vManualToggle" href="javascript:void(0)" onclick="toggleManualVehicle()" style="font-size:12px;color:var(--muted);text-decoration:underline">Non trovi il tuo veicolo? Cercalo online</a>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-row" style="margin-bottom:0">
@@ -1605,7 +1657,10 @@ async function loadFuelPrices() {
 
 function calcSavings(vehicle, kmSaved) {
   if (!vehicle || !kmSaved) return { cost: 0, fuel: 0, co2: 0 };
-  const realConsumption = vehicle.wltp * (REAL_WORLD_COEFF[vehicle.fuel] || 1.18);
+  // Prefer the user-provided real consumption; otherwise estimate it from WLTP
+  const realConsumption = (vehicle.consumption && vehicle.consumption > 0)
+    ? vehicle.consumption
+    : vehicle.wltp * (REAL_WORLD_COEFF[vehicle.fuel] || 1.18);
   const fuelUsed = (kmSaved / 100) * realConsumption;
   const price = fuelPrices[vehicle.fuel] || 1.812;
   const cost = fuelUsed * price;
@@ -3242,23 +3297,44 @@ async function openVehicleModal(editIdx) {
     const profile = window.userProfiles[currentUser] || {};
     const v = (profile.vehicles || [])[editingVehicleIdx];
     if (v) {
-      brandSel.value = v.brand;
-      onBrandChange();
-      document.getElementById('vModel').value = v.model;
-      onModelChange();
-      // Find engine index
+      // Open in manual mode if the vehicle was entered manually or is no longer in the DB
       const engines = CAR_DATABASE[v.brand]?.[v.model] || [];
       const eIdx = engines.findIndex(e => e.engine === v.engine);
-      if (eIdx >= 0) document.getElementById('vEngine').value = eIdx;
+      const useManual = v.manual || eIdx < 0;
+      setManualVehicleMode(useManual);
+      if (useManual) {
+        document.getElementById('vBrandManual').value = v.brand || '';
+        document.getElementById('vModelManual').value = v.model || '';
+        document.getElementById('vEngineManual').value = v.engine || '';
+        document.getElementById('vFuelManual').value = v.fuel || 'benzina';
+        document.getElementById('vWltpManual').value = v.wltp || '';
+      } else {
+        brandSel.value = v.brand;
+        onBrandChange();
+        document.getElementById('vModel').value = v.model;
+        onModelChange();
+        document.getElementById('vEngine').value = eIdx;
+      }
       document.getElementById('vYear').value = v.year;
-      document.getElementById('vConsumption').value = v.consumption || v.wltp;
+      const consInp = document.getElementById('vConsumption');
+      consInp.value = v.consumption || v.wltp;
+      consInp.dataset.userEdited = '1'; // don't overwrite an existing figure
     }
   } else {
+    setManualVehicleMode(false);
     document.getElementById('vModel').innerHTML = '<option value="">Seleziona modello...</option>';
     document.getElementById('vModel').disabled = true;
     document.getElementById('vEngine').innerHTML = '<option value="">Seleziona motore...</option>';
     document.getElementById('vEngine').disabled = true;
-    document.getElementById('vConsumption').value = '';
+    document.getElementById('vBrandManual').value = '';
+    document.getElementById('vModelManual').value = '';
+    document.getElementById('vEngineManual').value = '';
+    document.getElementById('vWltpManual').value = '';
+    const sq = document.getElementById('vSmartQuery'); if (sq) sq.value = '';
+    const ss = document.getElementById('vSmartStatus'); if (ss) ss.style.display = 'none';
+    const consInp = document.getElementById('vConsumption');
+    consInp.value = '';
+    delete consInp.dataset.userEdited;
     document.getElementById('vFuelInfo').style.display = 'none';
   }
   document.getElementById('vehicleModal').classList.add('open'); updateBodyLock();
@@ -3267,6 +3343,82 @@ async function openVehicleModal(editIdx) {
 function editVehicle(idx) {
   openVehicleModal(idx); // returns promise, fire-and-forget is fine for click handler
 }
+
+let manualVehicleMode = false;
+
+// Online lookup: free-text query → /vehicle-lookup (Anthropic API + web search) → prefill fields
+async function smartVehicleLookup() {
+  const queryInp = document.getElementById('vSmartQuery');
+  const btn = document.getElementById('vSmartBtn');
+  const status = document.getElementById('vSmartStatus');
+  const query = (queryInp.value || '').trim();
+  if (query.length < 3) { showToast('Descrivi il veicolo (marca, modello, motore)', 'error'); return; }
+
+  btn.disabled = true; btn.textContent = '...';
+  status.style.display = ''; status.textContent = 'Ricerca dei dati ufficiali in corso...';
+  try {
+    const res = await fetch('/vehicle-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      status.textContent = data.error || 'Ricerca non riuscita, inserisci i dati a mano';
+      return;
+    }
+    if (!data.found) {
+      status.textContent = data.note || 'Veicolo non trovato, inserisci i dati a mano';
+      return;
+    }
+    // Prefill fields
+    document.getElementById('vBrandManual').value = data.brand;
+    document.getElementById('vModelManual').value = data.model;
+    document.getElementById('vEngineManual').value = data.engine || '';
+    document.getElementById('vFuelManual').value = data.fuel;
+    document.getElementById('vWltpManual').value = data.wltp;
+    // Suggest real consumption from WLTP
+    const consInp = document.getElementById('vConsumption');
+    delete consInp.dataset.userEdited;
+    const real = (data.wltp * (REAL_WORLD_COEFF[data.fuel] || 1.18)).toFixed(1);
+    consInp.value = real;
+    status.textContent = '✓ Dati trovati' + (data.note ? ' — ' + data.note : '') + '. Controlla e salva.';
+  } catch(e) {
+    status.textContent = 'Errore di rete, riprova o inserisci a mano';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cerca';
+  }
+}
+
+function setManualVehicleMode(on) {
+  manualVehicleMode = on;
+  document.getElementById('vDbFields').style.display = on ? 'none' : '';
+  document.getElementById('vManualFields').style.display = on ? '' : 'none';
+  document.getElementById('vManualToggle').textContent = on
+    ? 'Torna alla selezione dal database'
+    : 'Non trovi il tuo veicolo? Cercalo online';
+  document.getElementById('vFuelInfo').style.display = 'none';
+}
+function toggleManualVehicle() { setManualVehicleMode(!manualVehicleMode); }
+
+// In manual mode, suggest the real consumption from the WLTP figure
+document.addEventListener('DOMContentLoaded', function() {
+  const wltpInp = document.getElementById('vWltpManual');
+  const fuelSel = document.getElementById('vFuelManual');
+  function suggestRealConsumption() {
+    const wltp = parseFloat(wltpInp.value);
+    const fuel = fuelSel.value;
+    if (!isNaN(wltp) && wltp > 0) {
+      const real = (wltp * (REAL_WORLD_COEFF[fuel] || 1.18)).toFixed(1);
+      const consInp = document.getElementById('vConsumption');
+      if (consInp && !consInp.dataset.userEdited) consInp.value = real;
+    }
+  }
+  if (wltpInp) wltpInp.addEventListener('input', suggestRealConsumption);
+  if (fuelSel) fuelSel.addEventListener('change', suggestRealConsumption);
+  const consInp = document.getElementById('vConsumption');
+  if (consInp) consInp.addEventListener('input', function() { this.dataset.userEdited = '1'; });
+});
 
 function onBrandChange() {
   const brand = document.getElementById('vBrand').value;
@@ -3318,26 +3470,49 @@ function closeVehicleModal() {
 }
 
 async function saveVehicle() {
-  const brand = document.getElementById('vBrand').value;
-  const model = document.getElementById('vModel').value;
-  const engineIdx = parseInt(document.getElementById('vEngine').value);
   const year = document.getElementById('vYear').value;
   const consumption = parseFloat(document.getElementById('vConsumption').value);
-  if (!brand || !model || isNaN(engineIdx) || !year || isNaN(consumption)) {
-    showToast('Compila tutti i campi', 'error');
-    return;
+
+  let vehicleData;
+  if (manualVehicleMode) {
+    const brand = document.getElementById('vBrandManual').value.trim();
+    const model = document.getElementById('vModelManual').value.trim();
+    const engine = document.getElementById('vEngineManual').value.trim();
+    const fuel = document.getElementById('vFuelManual').value;
+    const wltp = parseFloat(document.getElementById('vWltpManual').value);
+    if (!brand || !model || !fuel || isNaN(wltp) || !year || isNaN(consumption)) {
+      showToast('Compila tutti i campi', 'error');
+      return;
+    }
+    vehicleData = {
+      brand, model,
+      engine: engine || `${fuel} (manuale)`,
+      fuel,
+      wltp,
+      consumption,
+      year: parseInt(year),
+      manual: true,
+    };
+  } else {
+    const brand = document.getElementById('vBrand').value;
+    const model = document.getElementById('vModel').value;
+    const engineIdx = parseInt(document.getElementById('vEngine').value);
+    if (!brand || !model || isNaN(engineIdx) || !year || isNaN(consumption)) {
+      showToast('Compila tutti i campi', 'error');
+      return;
+    }
+    const engineData = CAR_DATABASE[brand][model][engineIdx];
+    vehicleData = {
+      brand, model,
+      engine: engineData.engine,
+      fuel: engineData.fuel,
+      wltp: engineData.wltp,
+      consumption,
+      year: parseInt(year),
+    };
   }
-  const engineData = CAR_DATABASE[brand][model][engineIdx];
   const profile = window.userProfiles[currentUser] || {};
   const vehicles = [...(profile.vehicles || [])];
-  const vehicleData = {
-    brand, model,
-    engine: engineData.engine,
-    fuel: engineData.fuel,
-    wltp: engineData.wltp,
-    consumption,
-    year: parseInt(year),
-  };
   let vehicleHistory = [...(profile.vehicleHistory || [])];
   const today = toDateStr(new Date());
   const oldActive = getActiveVehicle(profile);
