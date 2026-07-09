@@ -3395,17 +3395,22 @@ function toggleManualVehicle() { setManualVehicleMode(!manualVehicleMode); }
     const wltpInp = document.getElementById('vWltpManual');
     const fuelSel = document.getElementById('vFuelManual');
     if (!wltpInp || !fuelSel) return;
-    function suggestRealConsumption() {
-    const wltp = parseFloat(wltpInp.value);
-    const fuel = fuelSel.value;
-    if (!isNaN(wltp) && wltp > 0) {
-      const real = (wltp * (REAL_WORLD_COEFF[fuel] || 1.18)).toFixed(1);
-      const consInp = document.getElementById('vConsumption');
-      if (consInp && !consInp.dataset.userEdited) consInp.value = real;
+    function suggestRealConsumption(force) {
+      const wltp = parseFloat(wltpInp.value);
+      const fuel = fuelSel.value;
+      if (!isNaN(wltp) && wltp > 0) {
+        const real = (wltp * (REAL_WORLD_COEFF[fuel] || 1.18)).toFixed(1);
+        const consInp = document.getElementById('vConsumption');
+        if (consInp && (force || !consInp.dataset.userEdited)) {
+          consInp.value = real;
+          if (force) delete consInp.dataset.userEdited;
+        }
+      }
     }
-  }
-    if (wltpInp) wltpInp.addEventListener('input', suggestRealConsumption);
-    if (fuelSel) fuelSel.addEventListener('change', suggestRealConsumption);
+    // Typing a new WLTP always recalculates (a new engine invalidates the old figure);
+    // changing fuel respects a manually entered value.
+    if (wltpInp) wltpInp.addEventListener('input', function() { suggestRealConsumption(true); });
+    if (fuelSel) fuelSel.addEventListener('change', function() { suggestRealConsumption(false); });
     const consInp = document.getElementById('vConsumption');
     if (consInp) consInp.addEventListener('input', function() { this.dataset.userEdited = '1'; });
     // Live update of the Google search hint

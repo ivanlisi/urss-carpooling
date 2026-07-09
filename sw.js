@@ -1,4 +1,4 @@
-const CACHE_NAME = 'urss-v1';
+const CACHE_NAME = 'urss-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -42,8 +42,9 @@ self.addEventListener('fetch', function(event) {
         }
         return response;
       }).catch(() => cached);
-      // Network-first for index.html (always get fresh shell when online), cache-first for everything else
-      if (url.pathname === '/' || url.pathname === '/index.html') {
+      // Network-first for index.html and car-database.js (always fresh when online),
+      // cache-first for everything else
+      if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/car-database.js') {
         return fetchPromise.catch(() => cached) || cached;
       }
       return cached || fetchPromise;
