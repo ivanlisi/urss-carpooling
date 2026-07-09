@@ -1342,16 +1342,6 @@ body.modal-open {
         </div>
       </div>
       <div id="vManualFields" style="display:none">
-        <div class="form-row">
-          <label class="form-label">Cerca il tuo veicolo online</label>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="vSmartQuery" placeholder="es. Dacia Duster ECO-G 120 GPL"
-              style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
-            <button type="button" id="vSmartBtn" onclick="smartVehicleLookup()"
-              style="background:var(--accent,#4a7c59);color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;cursor:pointer;white-space:nowrap">Cerca</button>
-          </div>
-          <div id="vSmartStatus" style="display:none;margin-top:6px;font-size:12px;color:var(--muted)"></div>
-        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="form-row">
             <label class="form-label">Marca</label>
@@ -1387,9 +1377,15 @@ body.modal-open {
               style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;color:var(--text)">
           </div>
         </div>
+        <button type="button" id="vGoogleBtn" onclick="openGoogleConsumptionSearch()"
+          style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;color:var(--text);cursor:pointer;margin:2px 0 4px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          Cerca il consumo su Google
+        </button>
+        <div id="vGoogleHint" style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px">Compila marca e modello per attivare la ricerca</div>
       </div>
       <div style="text-align:center;margin:4px 0 10px">
-        <a id="vManualToggle" href="javascript:void(0)" onclick="toggleManualVehicle()" style="font-size:12px;color:var(--muted);text-decoration:underline">Non trovi il tuo veicolo? Cercalo online</a>
+        <a id="vManualToggle" href="javascript:void(0)" onclick="toggleManualVehicle()" style="font-size:12px;color:var(--muted);text-decoration:underline">Non trovi il tuo veicolo? Inseriscilo con l'aiuto di Google</a>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-row" style="margin-bottom:0">
@@ -3330,8 +3326,7 @@ async function openVehicleModal(editIdx) {
     document.getElementById('vModelManual').value = '';
     document.getElementById('vEngineManual').value = '';
     document.getElementById('vWltpManual').value = '';
-    const sq = document.getElementById('vSmartQuery'); if (sq) sq.value = '';
-    const ss = document.getElementById('vSmartStatus'); if (ss) ss.style.display = 'none';
+    if (typeof updateGoogleHint === 'function') updateGoogleHint();
     const consInp = document.getElementById('vConsumption');
     consInp.value = '';
     delete consInp.dataset.userEdited;
@@ -3346,48 +3341,39 @@ function editVehicle(idx) {
 
 let manualVehicleMode = false;
 
-// Online lookup: free-text query → /vehicle-lookup (Anthropic API + web search) → prefill fields
-async function smartVehicleLookup() {
-  const queryInp = document.getElementById('vSmartQuery');
-  const btn = document.getElementById('vSmartBtn');
-  const status = document.getElementById('vSmartStatus');
-  const query = (queryInp.value || '').trim();
-  if (query.length < 3) { showToast('Descrivi il veicolo (marca, modello, motore)', 'error'); return; }
+// Google-assisted lookup: builds a ready-made search query from the manual fields
+// and opens it in a new tab. The WLTP figure is almost always visible in the first
+// snippet; the user types just that one number back in.
+function buildGoogleConsumptionQuery() {
+  const brand = document.getElementById('vBrandManual')?.value.trim() || '';
+  const model = document.getElementById('vModelManual')?.value.trim() || '';
+  const engine = document.getElementById('vEngineManual')?.value.trim() || '';
+  const fuel = document.getElementById('vFuelManual')?.value || '';
+  if (!brand || !model) return null;
+  const unit = fuel === 'elettrico' ? 'kWh/100km' : 'l/100km';
+  return `${brand} ${model} ${engine} consumo WLTP ${unit}`.replace(/\s+/g, ' ').trim();
+}
 
-  btn.disabled = true; btn.textContent = '...';
-  status.style.display = ''; status.textContent = 'Ricerca dei dati ufficiali in corso...';
-  try {
-    const res = await fetch('/vehicle-lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      status.textContent = data.error || 'Ricerca non riuscita, inserisci i dati a mano';
-      return;
-    }
-    if (!data.found) {
-      status.textContent = data.note || 'Veicolo non trovato, inserisci i dati a mano';
-      return;
-    }
-    // Prefill fields
-    document.getElementById('vBrandManual').value = data.brand;
-    document.getElementById('vModelManual').value = data.model;
-    document.getElementById('vEngineManual').value = data.engine || '';
-    document.getElementById('vFuelManual').value = data.fuel;
-    document.getElementById('vWltpManual').value = data.wltp;
-    // Suggest real consumption from WLTP
-    const consInp = document.getElementById('vConsumption');
-    delete consInp.dataset.userEdited;
-    const real = (data.wltp * (REAL_WORLD_COEFF[data.fuel] || 1.18)).toFixed(1);
-    consInp.value = real;
-    status.textContent = '✓ Dati trovati' + (data.note ? ' — ' + data.note : '') + '. Controlla e salva.';
-  } catch(e) {
-    status.textContent = 'Errore di rete, riprova o inserisci a mano';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Cerca';
+function updateGoogleHint() {
+  const hint = document.getElementById('vGoogleHint');
+  const btn = document.getElementById('vGoogleBtn');
+  if (!hint || !btn) return;
+  const q = buildGoogleConsumptionQuery();
+  if (q) {
+    hint.textContent = 'Cercherà: "' + q + '"';
+    btn.style.opacity = '';
+    btn.style.pointerEvents = '';
+  } else {
+    hint.textContent = 'Compila marca e modello per attivare la ricerca';
+    btn.style.opacity = '0.5';
+    btn.style.pointerEvents = 'none';
   }
+}
+
+function openGoogleConsumptionSearch() {
+  const q = buildGoogleConsumptionQuery();
+  if (!q) { showToast('Compila prima marca e modello', 'error'); return; }
+  window.open('https://www.google.com/search?q=' + encodeURIComponent(q), '_blank');
 }
 
 function setManualVehicleMode(on) {
@@ -3396,8 +3382,9 @@ function setManualVehicleMode(on) {
   document.getElementById('vManualFields').style.display = on ? '' : 'none';
   document.getElementById('vManualToggle').textContent = on
     ? 'Torna alla selezione dal database'
-    : 'Non trovi il tuo veicolo? Cercalo online';
+    : 'Non trovi il tuo veicolo? Inseriscilo con l\'aiuto di Google';
   document.getElementById('vFuelInfo').style.display = 'none';
+  if (on && typeof updateGoogleHint === 'function') updateGoogleHint();
 }
 function toggleManualVehicle() { setManualVehicleMode(!manualVehicleMode); }
 
@@ -3418,6 +3405,12 @@ document.addEventListener('DOMContentLoaded', function() {
   if (fuelSel) fuelSel.addEventListener('change', suggestRealConsumption);
   const consInp = document.getElementById('vConsumption');
   if (consInp) consInp.addEventListener('input', function() { this.dataset.userEdited = '1'; });
+  // Live update of the Google search hint
+  ['vBrandManual','vModelManual','vEngineManual'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateGoogleHint);
+  });
+  if (fuelSel) fuelSel.addEventListener('change', updateGoogleHint);
 });
 
 function onBrandChange() {
