@@ -3388,11 +3388,14 @@ function setManualVehicleMode(on) {
 }
 function toggleManualVehicle() { setManualVehicleMode(!manualVehicleMode); }
 
-// In manual mode, suggest the real consumption from the WLTP figure
-document.addEventListener('DOMContentLoaded', function() {
-  const wltpInp = document.getElementById('vWltpManual');
-  const fuelSel = document.getElementById('vFuelManual');
-  function suggestRealConsumption() {
+// In manual mode, suggest the real consumption from the WLTP figure.
+// Robust to script position: runs immediately if the DOM is already parsed.
+(function wireManualVehicleInputs() {
+  function wire() {
+    const wltpInp = document.getElementById('vWltpManual');
+    const fuelSel = document.getElementById('vFuelManual');
+    if (!wltpInp || !fuelSel) return;
+    function suggestRealConsumption() {
     const wltp = parseFloat(wltpInp.value);
     const fuel = fuelSel.value;
     if (!isNaN(wltp) && wltp > 0) {
@@ -3401,17 +3404,23 @@ document.addEventListener('DOMContentLoaded', function() {
       if (consInp && !consInp.dataset.userEdited) consInp.value = real;
     }
   }
-  if (wltpInp) wltpInp.addEventListener('input', suggestRealConsumption);
-  if (fuelSel) fuelSel.addEventListener('change', suggestRealConsumption);
-  const consInp = document.getElementById('vConsumption');
-  if (consInp) consInp.addEventListener('input', function() { this.dataset.userEdited = '1'; });
-  // Live update of the Google search hint
-  ['vBrandManual','vModelManual','vEngineManual'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', updateGoogleHint);
-  });
-  if (fuelSel) fuelSel.addEventListener('change', updateGoogleHint);
-});
+    if (wltpInp) wltpInp.addEventListener('input', suggestRealConsumption);
+    if (fuelSel) fuelSel.addEventListener('change', suggestRealConsumption);
+    const consInp = document.getElementById('vConsumption');
+    if (consInp) consInp.addEventListener('input', function() { this.dataset.userEdited = '1'; });
+    // Live update of the Google search hint
+    ['vBrandManual','vModelManual','vEngineManual'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', updateGoogleHint);
+    });
+    if (fuelSel) fuelSel.addEventListener('change', updateGoogleHint);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
+})();
 
 function onBrandChange() {
   const brand = document.getElementById('vBrand').value;
