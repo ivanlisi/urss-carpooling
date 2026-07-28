@@ -1785,24 +1785,6 @@ function isAbsent(person, dateStr) {
   return absences.some(a => a.person===person && a.from<=dateStr && a.to>=dateStr);
 }
 
-// Periodi di "ferie comandate" all'italiana: settimana di Ferragosto (lun-dom
-// che contiene il 15/8) e feste di Natale (24/12 → 6/1). In questi giorni la
-// rotazione è congelata: chi lavora guida, ma non si accumulano turni persi.
-function isProtectedPeriod(ds) {
-  const [y, m, dd] = ds.split('-').map(Number);
-  if (m === 12 && dd >= 24) return true;
-  if (m === 1 && dd <= 6) return true;
-  if (m === 8) {
-    const aug15 = new Date(y, 7, 15);
-    const dow = (aug15.getDay() + 6) % 7; // 0 = lunedì
-    const mon = new Date(y, 7, 15 - dow);
-    const sun = new Date(y, 7, 15 - dow + 6);
-    const cur = new Date(y, m - 1, dd);
-    return cur >= mon && cur <= sun;
-  }
-  return false;
-}
-
 // Determine effective driver for a given date by simulating the rotation from
 // the most recent anchor/checkpoint up to that date. When someone is absent on
 // a given day, they are simply skipped (the rotation index does NOT advance
@@ -1879,33 +1861,6 @@ function getEffectiveDriver(date) {
   while (cursor <= d) {
     if (isWorkDay(cursor)) {
       const cds = toDateStr(cursor);
-
-      if (isProtectedPeriod(cds)) {
-        // "Ferie comandate": la rotazione globale è congelata. Chi è al lavoro
-        // guida, alternandosi localmente tra i presenti, ma nessuno accumula
-        // turni persi e la coda globale resta esattamente com'era. Alla fine
-        // del periodo si riprende da dove si era rimasti.
-        const localOrder = order.slice();
-        while (cursor <= d) {
-          const pds = toDateStr(cursor);
-          if (!isProtectedPeriod(pds)) break;
-          if (isWorkDay(cursor)) {
-            let drv = exceptions[pds]?.driver || null;
-            if (!drv) {
-              const di = localOrder.findIndex(n => !isAbsent(n, pds));
-              if (di >= 0) {
-                drv = localOrder[di];
-                localOrder.splice(di, 1);
-                localOrder.push(drv);
-              }
-            }
-            if (cursor.getTime() === d.getTime()) return drv; // può essere null (tutti assenti)
-          }
-          cursor.setDate(cursor.getDate() + 1);
-        }
-        continue;
-      }
-
       const exDriver = exceptions[cds]?.driver;
 
       if (exDriver) {
@@ -2152,8 +2107,12 @@ function renderCalendar() {
         const driverLabel = driver.length > 8 ? driver.slice(0,4).toUpperCase() + '.' : driver.toUpperCase();
         bandHtml = `<div class="day-band" style="background:${col.mid};color:${col.fg};--band-color:${col.mid};--band-dark:${col.fg}">${driverLabel}</div>`;
         if (isModified) modClass = 'modified';
+      } else {
+        // Tutti in ferie: stessa tile grigia dei giorni normali (tinta neutra
+        // al 5%, identica formula delle tile driver), dicitura muta stile "fest"
+        tileStyle = 'background:#3A3A360D';
+        bandHtml = `<div class="day-band" style="background:transparent;color:var(--muted)">ferie</div>`;
       }
-      // driver null (everyone absent): no band, plain empty tile
     } else {
       bandHtml = `<div class="day-band">fest</div>`;
     }
