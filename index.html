@@ -1861,16 +1861,10 @@ function getEffectiveDriver(date) {
   while (cursor <= d) {
     if (isWorkDay(cursor)) {
       const cds = toDateStr(cursor);
+      // A manual swap is a private arrangement for that day only: the returned
+      // driver is the swapped one, but the OFFICIAL rotation (queue, missed
+      // turns, courtesy) evolves with the natural driver as if no swap existed.
       const exDriver = exceptions[cds]?.driver;
-
-      if (exDriver) {
-        if (cursor.getTime() === d.getTime()) return exDriver;
-        // A manual swap: move that driver to the back, keep the queue moving
-        order = order.filter(n => n !== exDriver);
-        order.push(exDriver);
-        cursor.setDate(cursor.getDate() + 1);
-        continue;
-      }
 
       // Courtesy: a returner present today who missed a turn drives first.
       let driver = null;
@@ -1897,7 +1891,7 @@ function getEffectiveDriver(date) {
         if (di < 0) {
           // Everyone is absent: the day is void — no turn, nobody misses anything,
           // the queue stays exactly as it is.
-          if (cursor.getTime() === d.getTime()) return null;
+          if (cursor.getTime() === d.getTime()) return exDriver || null;
           cursor.setDate(cursor.getDate() + 1);
           continue;
         }
@@ -1905,11 +1899,11 @@ function getEffectiveDriver(date) {
         driver = order[di];
       }
 
-      // Driver moves to the back of the queue
+      // The NATURAL driver moves to the back of the queue (even on swapped days)
       order = order.filter(n => n !== driver);
       order.push(driver);
 
-      if (cursor.getTime() === d.getTime()) return driver;
+      if (cursor.getTime() === d.getTime()) return exDriver || driver;
     }
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -2542,9 +2536,11 @@ function clearAbsenceForm() {
 
 // ── SWAP MODAL ────────────────────────────────────────────────────────────────
 let currentSwapDate = null;
+let swapModalOriginalDriver = null;
 
 function openSwapModal(ds, driver, dayNum, dayName, monthName) {
   currentSwapDate = ds;
+  swapModalOriginalDriver = driver;
   document.getElementById('modalTitle').textContent = `${dayName} ${dayNum} ${monthName}`;
   document.getElementById('modalSub').textContent = `Turno di ${driver} · Via Tarkowskij 07:45`;
   const ex = exceptions[ds] || {};
@@ -2579,10 +2575,26 @@ function saveSwap() {
     const driver = selectedCheck.id.replace('driverCheck_','');
     exceptions[ds] = { driver, note };
     if (window._saveException) window._saveException(ds, { driver, note });
+
+    // Keep the day-level presence flags in sync with this assignment, so they
+    // don't go stale and trigger a wrong "non sarà in macchinata" push later:
+    // the newly assigned driver is clearly present today; the driver they
+    // replaced (if different) is marked as having given away their turn.
+    if (!presences[ds]) presences[ds] = {};
+    presences[ds][driver] = true;
+    if (swapModalOriginalDriver && swapModalOriginalDriver !== driver) {
+      presences[ds][swapModalOriginalDriver] = false;
+    }
+    window.presences = presences;
+    if (window._fsSetDoc && window._fsDoc && window._db) {
+      window._fsSetDoc(window._fsDoc(window._db, 'presences', ds), presences[ds], { merge: true })
+        .catch(e => console.warn('Presence sync error', e));
+    }
   } else if (note) {
     exceptions[ds] = { ...(exceptions[ds]||{}), note };
     if (window._saveException) window._saveException(ds, exceptions[ds]);
   }
+  swapModalOriginalDriver = null;
   closeSwapModal();
   renderAll();
   if (currentSwapDate <= toDateStr(today)) saveTurnoOggi();
