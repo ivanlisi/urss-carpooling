@@ -1980,14 +1980,7 @@ function renderHero() {
       <div class="hero-name">${driver}</div>
       <div class="hero-detail">${detailText}</div>
     </div>
-    ${(() => {
-      const nowIt = new Date(new Date().getTime() + ((new Date().getMonth()>=2&&new Date().getMonth()<=9)?2:1)*3600000);
-      const todayIt = nowIt.toISOString().slice(0,10);
-      const isPastDeparture = ds < todayIt || (ds === todayIt && (nowIt.getUTCHours() > 7 || (nowIt.getUTCHours() === 7 && nowIt.getUTCMinutes() >= 45)));
-      return isPastDeparture
-        ? '<button class="hero-badge" style="opacity:0.4;cursor:default;background:rgba(255,255,255,0.1);border:none;color:white;font-family:inherit" disabled>modifica</button>'
-        : '<button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal(\'' + ds + '\', \'' + driver + '\', ' + d.getDate() + ', \'' + dayNames[d.getDay()] + '\', \'' + ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][d.getMonth()] + '\')">modifica</button>';
-    })()}
+    <button class="hero-badge" style="cursor:pointer;background:rgba(255,255,255,0.2);border:none;color:white;font-family:inherit" onclick="openSwapModal('${ds}', '${driver}', ${d.getDate()}, '${dayNames[d.getDay()]}', '${['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][d.getMonth()]}')">modifica</button>
   `;
 }
 
@@ -2332,6 +2325,25 @@ async function saveTurnoOggi() {
   }
 }
 
+// Keeps the historical record (turni_completati, source of statistics and
+// savings) in sync when a driver swap is made for a day that has already
+// happened — today included. Doesn't touch future days: those are registered
+// as they occur, either by the app or by the worker's 19:00 job. Preserves an
+// already-saved vehicle choice for that day if present.
+async function registerTurnForDate(ds, driver) {
+  if (!driver || !ds) return;
+  if (ds > toDateStr(today)) return;
+  const existing = turniCompletati[ds];
+  const vehicleIdx = (existing && typeof existing === 'object') ? existing.vehicleIdx : undefined;
+  turniCompletati[ds] = vehicleIdx !== undefined ? { driver, vehicleIdx } : driver;
+  if (window._fsSetDoc && window._fsDoc && window._db) {
+    try {
+      const payload = vehicleIdx !== undefined ? { driver, vehicleIdx } : { driver };
+      await window._fsSetDoc(window._fsDoc(window._db, 'turni_completati', ds), payload, { merge: true });
+    } catch(e) { console.warn('registerTurnForDate error', e); }
+  }
+}
+
 function renderAbsences() {
   const list = document.getElementById('absenceList');
   // Hide absences whose end date has already passed (kept in DB as archive)
@@ -2597,7 +2609,10 @@ function saveSwap() {
   swapModalOriginalDriver = null;
   closeSwapModal();
   renderAll();
-  if (currentSwapDate <= toDateStr(today)) saveTurnoOggi();
+  // Aggiorna lo storico (statistiche/risparmi) per il giorno effettivamente
+  // modificato, non solo per "oggi": permette di correggere anche a posteriori.
+  const finalDriver = getEffectiveDriver(new Date(currentSwapDate + 'T00:00:00'));
+  registerTurnForDate(currentSwapDate, finalDriver);
   // Notify others of turn change
   if (selectedCheck) {
     const changedDriver = selectedCheck.id.replace('driverCheck_','');
@@ -2800,25 +2815,27 @@ function absentBannerText(absent) {
   return absent.slice(0,-1).join(', ') + ' e ' + absent[absent.length-1] + ' non saranno in macchinata';
 }
 
-// Called when user selects presente/non presente from dropdown — local only until Confirm
-function selectPresence(ds, isPresent) {
-  if (!currentUser) return;
-  // Block presence changes after 07:30 on current day
+// Called when someone selects presente/non presente from the dropdown, for
+// any person's row — local only until Confirm. Editable by anyone, not just
+// the account owner, up to 08:00 of that day.
+function selectPresence(ds, person, isPresent) {
+  if (!currentUser || !person) return;
   const now = new Date();
   const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
   const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
   const todayStr = italianNow.toISOString().slice(0,10);
-  if (ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 30)))) {
+  if (ds < todayStr || (ds === todayStr && italianNow.getUTCHours() >= 8)) {
     showToast('Troppo tardi per modificare la presenza', 'error');
     return;
   }
   document.querySelectorAll('.presence-dropdown').forEach(function(d) { d.style.display = 'none'; });
   if (!presences[ds]) presences[ds] = {};
-  presences[ds][currentUser] = isPresent;
+  presences[ds][person] = isPresent;
   window.presences = presences;
   // Mark that there's a pending presence change
   if (!pendingSwapDs) {
     pendingPresenceDs = ds;
+    pendingPresencePerson = person;
     pendingPresenceValue = isPresent;
   }
   scheduleRender({turnList:true, calendar:true});
@@ -2910,13 +2927,14 @@ async function selectTurnVehicle(idx) {
 function renderPresenceModal(ds) {
   const list = document.getElementById('presenceList');
   if (!list) return;
-  // Disable swap after 07:45, disable presence change after 07:30 (morning notification already sent)
+  // Cambio guidatore: nessun limite orario (anche a posteriori).
+  // Presenza: modificabile da chiunque per chiunque, fino alle 08:00 del giorno.
   const now = new Date();
   const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
   const italianNow = new Date(now.getTime() + italianOffset * 60 * 60 * 1000);
   const todayStr = italianNow.toISOString().slice(0,10);
-  const isPast = ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 45)));
-  const isPresenceLocked = ds < todayStr || (ds === todayStr && (italianNow.getUTCHours() > 7 || (italianNow.getUTCHours() === 7 && italianNow.getUTCMinutes() >= 30)));
+  const isPast = false;
+  const isPresenceLocked = ds < todayStr || (ds === todayStr && italianNow.getUTCHours() >= 8);
 
   const d = new Date(ds + 'T00:00:00Z');
   const currentDriver = getEffectiveDriver(d);
@@ -2935,7 +2953,7 @@ function renderPresenceModal(ds) {
     const driverBadge = isDriver ? ' <span style="font-size:9px;background:var(--primary);color:white;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500">GUIDA</span>' : '';
     const meTxt = isMe ? ' <span style="font-size:10px;color:var(--muted)">(tu)</span>' : '';
 
-    // Click on user row swaps driver (unless past departure or already the driver)
+    // Click on user row swaps driver (unless already the driver)
     const canSwap = !isPast && !isDriver;
     const userClick = canSwap ? ' onclick="swapDriverFromPresence(&quot;' + ds + '&quot;,&quot;' + name + '&quot;)" style="cursor:pointer"' : '';
 
@@ -2945,31 +2963,25 @@ function renderPresenceModal(ds) {
     html += '<div class="presence-name">' + name + meTxt + driverBadge + '</div>';
     html += '</div>';
 
-    if (isMe) {
-      // If I am the driver, no pill needed
-      if (isDriver) { html += '</div>'; return; }
-      const badgeCls = absent ? 'pbadge-me absent' : 'pbadge-me';
-      const badgeTxt = absent ? 'non presente' : 'presente';
-      html += '<div style="position:relative">';
-      if (isPresenceLocked) {
-        html += '<div class="' + badgeCls + '" style="opacity:0.5;cursor:default">' + badgeTxt + '</div>';
-      } else {
-        html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown(&quot;' + ds + '&quot;)">' + badgeTxt + ' ▾</div>';
-        html += '<div class="presence-dropdown" id="presenceDrop_' + ds + '" style="display:none">';
-        const activeYes = !absent ? 'active' : '';
-        const activeNo = absent ? 'active' : '';
-        html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="selectPresence(&quot;' + ds + '&quot;, true)">Presente</div>';
-        html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="selectPresence(&quot;' + ds + '&quot;, false)">Non presente</div>';
-        html += '</div>';
-      }
-      html += '</div>';
+    // Don't show a pill for the driver (they're driving, of course they're there).
+    // Everyone else's presence is editable by anyone, same as the driver swap.
+    if (isDriver) { html += '</div>'; return; }
+    const badgeCls = isMe ? (absent ? 'pbadge-me absent' : 'pbadge-me') : (absent ? 'pbadge-no' : 'pbadge-yes');
+    const badgeTxt = absent ? 'non presente' : 'presente';
+    const dropId = 'presenceDrop_' + ds + '_' + name;
+    html += '<div style="position:relative">';
+    if (isPresenceLocked) {
+      html += '<div class="' + badgeCls + '" style="opacity:0.5;cursor:default">' + badgeTxt + '</div>';
     } else {
-      // Don't show pill for the driver (they're driving, of course they're there)
-      if (isDriver) { html += '</div>'; return; }
-      const badgeCls2 = absent ? 'pbadge-no' : 'pbadge-yes';
-      const badgeTxt2 = absent ? 'non presente' : 'presente';
-      html += '<span class="' + badgeCls2 + '">' + badgeTxt2 + '</span>';
+      html += '<div class="' + badgeCls + '" onclick="togglePresenceDropdown(&quot;' + ds + '&quot;,&quot;' + name + '&quot;)" style="cursor:pointer">' + badgeTxt + ' ▾</div>';
+      html += '<div class="presence-dropdown" id="' + dropId + '" style="display:none">';
+      const activeYes = !absent ? 'active' : '';
+      const activeNo = absent ? 'active' : '';
+      html += '<div class="pdrop-opt opt-yes ' + activeYes + '" onclick="selectPresence(&quot;' + ds + '&quot;,&quot;' + name + '&quot;, true)">Presente</div>';
+      html += '<div class="pdrop-opt opt-no ' + activeNo + '" onclick="selectPresence(&quot;' + ds + '&quot;,&quot;' + name + '&quot;, false)">Non presente</div>';
+      html += '</div>';
     }
+    html += '</div>';
     html += '</div>';
   });
 
@@ -2982,6 +2994,7 @@ let pendingSwapDs = null;
 let pendingSwapDriver = null;
 let originalDriver = null;
 let pendingPresenceDs = null;
+let pendingPresencePerson = null;
 let pendingPresenceValue = null;
 
 function cancelSwapOrClose() {
@@ -2999,12 +3012,13 @@ function cancelSwapOrClose() {
     if (btn) { btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none'; }
   }
   // Restore pending presence change if cancelled
-  if (pendingPresenceDs !== null) {
+  if (pendingPresenceDs !== null && pendingPresencePerson !== null) {
     if (presences[pendingPresenceDs]) {
-      presences[pendingPresenceDs][currentUser] = !pendingPresenceValue; // restore opposite
+      presences[pendingPresenceDs][pendingPresencePerson] = !pendingPresenceValue; // restore opposite
       window.presences = presences;
     }
     pendingPresenceDs = null;
+    pendingPresencePerson = null;
     pendingPresenceValue = null;
   }
   closePresenceModal();
@@ -3031,6 +3045,8 @@ async function confirmSwap() {
     try {
       await window._fsSetDoc(window._fsDoc(window._db, 'exceptions', ds), exceptions[ds], { merge: true });
     } catch(e) { console.warn('Swap save error', e); }
+    // Aggiorna lo storico (statistiche/risparmi) anche per giorni passati
+    registerTurnForDate(ds, newDriver);
     const d = new Date(ds + 'T00:00:00Z');
     const dayN = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
     const monthN = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
@@ -3042,6 +3058,7 @@ async function confirmSwap() {
   pendingSwapDriver = null;
   originalDriver = null;
   pendingPresenceDs = null;
+  pendingPresencePerson = null;
   pendingPresenceValue = null;
 
   closePresenceModal();
@@ -3073,8 +3090,8 @@ async function swapDriverFromPresence(ds, newDriver) {
   if (btn) { btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; }
 }
 
-function togglePresenceDropdown(ds) {
-  const drop = document.getElementById('presenceDrop_' + ds);
+function togglePresenceDropdown(ds, person) {
+  const drop = document.getElementById('presenceDrop_' + ds + '_' + person);
   if (!drop) return;
   const isOpen = drop.style.display !== 'none';
   document.querySelectorAll('.presence-dropdown').forEach(function(d) {
@@ -4079,21 +4096,6 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => { setTimeout(init, 600); });
-
-// Re-render hero at 07:45 to disable modifica button
-function scheduleHeroRefresh() {
-  const now = new Date();
-  const italianOffset = (now.getMonth() >= 2 && now.getMonth() <= 9) ? 2 : 1;
-  const italianNow = new Date(now.getTime() + italianOffset * 3600000);
-  const target = new Date(italianNow);
-  target.setUTCHours(7, 45, 0, 0);
-  let msUntil = target - italianNow;
-  if (msUntil < 0) msUntil += 24 * 60 * 60 * 1000; // tomorrow
-  setTimeout(function() {
-    scheduleRender({hero:true, turnList:true});
-  }, msUntil);
-}
-scheduleHeroRefresh();
 
 // ── PUSH NOTIFICATIONS ────────────────────────────────────────────────────────
 const VAPID_PUBLIC_KEY = 'BN39wwjb-XAydFuxQ7X3y5i-lF3X_WNnAfW6mukkBGsXOzCwvkLhhiP2Rh0PZljH-issSY91JrIsnRqPM_MtkLk';
